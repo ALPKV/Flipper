@@ -7,7 +7,7 @@ out of Clip Farmer, an audio-based auto-clipper (the original Streamlit version 
 
 | Tab | What it does |
 | --- | --- |
-| **Highlights** | A sound louder than the sensitivity makes a clip; sounds within the skip gap after it (3 s by default) are ignored. Talking is filtered out. Untick or remove (Not a shot) any clip, then save clips one by one or join them into one highlights video, made in parts so long sessions don't run out of memory. Save to Photos on phones. |
+| **Clip Farmer** | Choose a video, review audio-detected clips, and export one highlights MP4. Optional Noisy hall filtering reduces false clips at the cost of softer shots. Exclusions are reversible. Tracking is off by default. |
 | **Ball Tracking** | Follows the ball through a clip and draws it over the video (toggle on and off). Times speed and length from release, bounce and contact marks. Pitch map of the deliveries tracked in the session. |
 
 Everything runs on your device: there are no accounts, no database and no uploads (FFmpeg compiled to
@@ -21,9 +21,7 @@ the simple rule above. Results on labelled sessions are in `scripts/deliveries/R
 
 ## How speed is measured (and how accurate it is)
 
-Speed is **timed**, not guessed from pixels: the ball travels a known distance (17.68 m, crease to
-crease, by default) between release and bat contact. Contact comes from the audio, accurate to a few
-milliseconds. Release comes from the first frame the ball is seen. **Check every auto mark** with
+Speed is an **unvalidated timing estimate**, not radar: the calculation assumes a distance (17.68 m, crease to crease, by default) between release and contact. That assumed distance is not a measured 3D ball path. Contact comes from an audio impact, which may be a bat, net, or another sound and can include sound-travel delay. Release comes from the first frame the ball is seen, which is not necessarily the true release. **Check every auto mark** with
 the frame-step buttons; one frame at 30 fps is about 5% of the speed. Film at 60 fps or more, on a
 tripod, with the release and the batter both in view. Length assumes the ball keeps that speed to the
 bounce. Line needs the camera behind the stumps and the stumps marked. All are estimates, not radar.
@@ -63,3 +61,16 @@ On [vercel.com](https://vercel.com) (free Hobby plan): **Add New → Project**, 
 
 `config.yaml` (old Streamlit logins) is no longer tracked, but earlier commits of this public
 repository still contain it. Don't reuse those passwords anywhere.
+
+## Simplified workflow (24 October 2026)
+
+- Audio features run in a dedicated worker so the page remains responsive. Changing detection settings reuses those features.
+- No automatic multipart exports or downloads. Recommended quality copies small reels; larger ones use bounded-bitrate 720p encoding. Encoding takes longer.
+- One explicit Save downloads one MP4. Save to Photos/gallery is a separate action.
+- Selections that exceed a conservative device budget are blocked with an explanation; memory budgets are estimates, not guarantees.
+- The FFmpeg core is explicitly cached where browser storage permits, even when its worker is restarted.
+- Track association uses presentation-time differences; stalled frame capture is cleaned up and times out instead of hanging.
+- Original-quality cuts can start at earlier keyframes and have variable-frame-rate boundary artifacts. Use Smaller 720p for exact cuts.
+- No new ball model was trained in this change. Ball tracking and speed/length remain experimental and unvalidated against radar or calibrated bounce coordinates.
+
+See `FIX-VALIDATION.md` for measured checks and remaining limits.

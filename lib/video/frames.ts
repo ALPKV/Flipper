@@ -44,7 +44,8 @@ export async function captureFrames(
         const out = await pass(video, ctx, w, h, start, end, rate, onProgress);
         if (out.frames.length >= 3 && !fpsHint) fps = estimateFps(out.times);
         const dropped = out.dropped / Math.max(1, out.frames.length + out.dropped);
-        if (out.frames.length >= 3 && dropped < 0.05) return { ...out, width: w, height: h };
+        const coversClip = out.times.length > 2 && out.times[0] <= start + 2 / fps && out.times.at(-1)! >= end - 2 / fps;
+        if (out.frames.length >= 3 && dropped < 0.05 && coversClip) return { ...out, width: w, height: h };
         if (out.frames.length < 3 || rate <= 0.1) break;
         rate = Math.max(0.1, Math.min(rate / 2, 45 / fps));
       }
@@ -72,8 +73,11 @@ async function pass(
   onProgress?: (fraction: number) => void,
 ): Promise<PassResult> {
   video.pause();
-  video.currentTime = Math.max(0, start);
-  await once(video, "seeked");
+  if (Math.abs(video.currentTime - start) > 0.001) {
+    const seeked = once(video, "seeked");
+    video.currentTime = Math.max(0, start);
+    await seeked;
+  }
   video.playbackRate = rate;
   const frames: Gray[] = [];
   const times: number[] = [];
@@ -81,11 +85,25 @@ async function pass(
   let lastPresented = -1;
 
   await new Promise<void>((resolve, reject) => {
-    // If the browser stops presenting frames (hidden or throttled tab), give up quickly.
-    let timer = setTimeout(() => resolve(), 1500);
-    const onFrame = (_now: number, meta: VideoFrameCallbackMetadata) => {
+    let callback = 0;
+    let finished = false;
+    const finish = (error?: Error) => {
+      if (finished) return;
+      finished = true;
       clearTimeout(timer);
-      timer = setTimeout(() => resolve(), 1500);
+      video.cancelVideoFrameCallback(callback);
+      video.removeEventListener("ended", ended);
+      video.pause();
+      if (error) reject(error); else resolve();
+    };
+    const ended = () => finish();
+    video.addEventListener("ended", ended, { once: true });
+    // If the browser stops presenting frames (hidden or throttled tab), give up quickly.
+    let timer = setTimeout(() => finish(), 1500);
+    const onFrame = (_now: number, meta: VideoFrameCallbackMetadata) => {
+      if (finished) return;
+      clearTimeout(timer);
+      timer = setTimeout(() => finish(), 1500);
       if (lastPresented >= 0 && meta.presentedFrames > lastPresented + 1) dropped += meta.presentedFrames - lastPresented - 1;
       lastPresented = meta.presentedFrames;
       if (meta.mediaTime >= start - 1e-3 && (times.length === 0 || meta.mediaTime > times[times.length - 1])) {
@@ -95,15 +113,13 @@ async function pass(
         onProgress?.(Math.min(1, (meta.mediaTime - start) / (end - start)));
       }
       if (meta.mediaTime >= end || video.ended) {
-        clearTimeout(timer);
-        video.pause();
-        resolve();
+        finish();
       } else {
-        video.requestVideoFrameCallback(onFrame);
+        callback = video.requestVideoFrameCallback(onFrame);
       }
     };
-    video.requestVideoFrameCallback(onFrame);
-    video.play().catch(reject);
+    callback = video.requestVideoFrameCallback(onFrame);
+    video.play().catch((err) => finish(err));
   });
   return { frames, times, dropped };
 }
@@ -125,8 +141,9 @@ async function stepBySeeking(
   const times: number[] = [];
   // Seek to the middle of each frame so rounding never lands on the neighbouring one.
   for (let t = start + step / 2; t <= end; t += step) {
+    const seeked = once(video, "seeked");
     video.currentTime = t;
-    await once(video, "seeked");
+    await seeked;
     ctx.drawImage(video, 0, 0, w, h);
     frames.push(toGray(ctx.getImageData(0, 0, w, h).data, w, h));
     times.push(t);
@@ -143,11 +160,18 @@ function estimateFps(times: number[]): number {
 
 function once(el: HTMLElement, event: string): Promise<void> {
   return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => {
+      el.removeEventListener(event, ok);
+      el.removeEventListener("error", bad);
+      reject(new Error("Video decoding timed out. Keep this tab visible, or try a shorter H.264 recording."));
+    }, 12_000);
     const ok = () => {
+      clearTimeout(timer);
       el.removeEventListener("error", bad);
       resolve();
     };
     const bad = () => {
+      clearTimeout(timer);
       el.removeEventListener(event, ok);
       reject(new Error("This browser cannot play the video. Try an MP4 (H.264) file."));
     };

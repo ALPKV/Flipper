@@ -15,7 +15,14 @@ const FFMPEG_MODULE = "/vendor/ffmpeg/index.js";
 let instance: Promise<FFmpeg> | null = null;
 
 async function toBlobURL(url: string, type: string): Promise<string> {
-  const res = await fetch(url);
+  // Rebuilding a worker after an export must not download another 30 MB engine.
+  let cache: Cache | undefined;
+  try { cache = await caches.open("flipper-ffmpeg-core-0.12.10"); } catch { /* private-mode fallback */ }
+  let res = await cache?.match(url);
+  if (!res) {
+    res = await fetch(url);
+    if (res.ok) await cache?.put(url, res.clone()).catch(() => {});
+  }
   if (!res.ok) throw new Error("Could not download the video engine. Check your connection.");
   return URL.createObjectURL(new Blob([await res.arrayBuffer()], { type }));
 }
@@ -27,10 +34,12 @@ async function getFFmpeg(): Promise<FFmpeg> {
         /* webpackIgnore: true */ /* turbopackIgnore: true */ FFMPEG_MODULE
       )) as typeof import("@ffmpeg/ffmpeg");
       const ff = new FFmpeg();
-      await ff.load({
-        coreURL: await toBlobURL(`${CORE}/ffmpeg-core.js`, "text/javascript"),
-        wasmURL: await toBlobURL(`${CORE}/ffmpeg-core.wasm`, "application/wasm"),
-      });
+      const urls = await Promise.all([
+        toBlobURL(`${CORE}/ffmpeg-core.js`, "text/javascript"),
+        toBlobURL(`${CORE}/ffmpeg-core.wasm`, "application/wasm"),
+      ]);
+      try { await ff.load({ coreURL: urls[0], wasmURL: urls[1] }); }
+      finally { urls.forEach((url) => URL.revokeObjectURL(url)); }
       return ff;
     })().catch((err) => {
       instance = null;
@@ -125,11 +134,11 @@ export async function extractAudio(
 /**
  * Cuts [start, start+duration). Fast mode copies the stream (seconds, original quality, but the cut
  * snaps to the keyframe before `start`). Precise mode re-encodes, so every clip starts on the exact
- * frame; it is slower and scales anything larger than 1080p down to 1080p.
+ * frame; it is slower and fits the output inside 1280×720 at a bounded bitrate.
  */
 async function cut(ff: FFmpeg, path: string, start: number, duration: number, out: string, precise = false) {
   const codec = precise
-    ? ["-vf", "scale='min(1080,iw)':-2", "-c:v", "libx264", "-preset", "ultrafast", "-crf", "22", "-pix_fmt", "yuv420p", "-c:a", "aac", "-b:a", "128k", "-ar", "44100", "-ac", "2"]
+    ? ["-vf", "scale=w='min(1280,iw)':h='min(720,ih)':force_original_aspect_ratio=decrease:force_divisible_by=2", "-c:v", "libx264", "-preset", "ultrafast", "-b:v", "1500k", "-maxrate", "1500k", "-bufsize", "3000k", "-pix_fmt", "yuv420p", "-c:a", "aac", "-b:a", "96k", "-ar", "44100", "-ac", "2"]
     : ["-c", "copy", "-avoid_negative_ts", "make_zero"];
   const code = await ff.exec([
     "-ss", start.toFixed(3), "-i", path, "-t", duration.toFixed(3),
@@ -179,7 +188,10 @@ export async function exportReel(
         if (code !== 0) throw new Error("FFmpeg could not join the clips.");
         const data = (await ff.readFile("/reel.mp4")) as Uint8Array<ArrayBuffer>;
         onProgress?.(1);
-        return new Blob([data], { type: "video/mp4" });
+        const blob = new Blob([data], { type: "video/mp4" });
+        await ff.deleteFile("/reel.mp4");
+        await ff.deleteFile("/list.txt");
+        return blob;
       },
       true,
     );

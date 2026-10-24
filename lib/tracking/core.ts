@@ -176,6 +176,8 @@ export function track(
 ): TrackPoint[] {
   let best: TrackPoint[] = [];
   let bestScore = -Infinity;
+  const intervals = times.slice(1).map((t, i) => t - times[i]).filter((dt) => dt > 0).sort((a, b) => a - b);
+  const frameTime = intervals[Math.floor(intervals.length / 2)] ?? 1 / 30;
   const used = new Set<string>();
   const pt = (i: number, c: Candidate): TrackPoint => ({
     i,
@@ -191,11 +193,13 @@ export function track(
     for (const a of cands[i]) {
       for (let g = 1; g <= opt.maxGap + 1 && i + g < cands.length; g++) {
         for (const b of cands[i + g]) {
-          const step = Math.hypot(b.x - a.x, b.y - a.y) / g;
+          const elapsed = times[i + g] - times[i];
+          if (!(elapsed > 0)) continue;
+          const step = Math.hypot(b.x - a.x, b.y - a.y) * frameTime / elapsed;
           if (step < opt.minStep || step > opt.maxStep) continue;
           const key = `${i}:${a.x.toFixed(1)}:${a.y.toFixed(1)}>${i + g}:${b.x.toFixed(1)}`;
           if (used.has(key)) continue;
-          const chain = extend([pt(i, a), pt(i + g, b)], cands, times, opt);
+          const chain = extend([pt(i, a), pt(i + g, b)], cands, times, opt, frameTime);
           for (let k = 1; k < chain.length; k++) {
             used.add(`${chain[k - 1].i}:${chain[k - 1].x.toFixed(1)}:${chain[k - 1].y.toFixed(1)}>${chain[k].i}:${chain[k].x.toFixed(1)}`);
           }
@@ -212,16 +216,17 @@ export function track(
   return best;
 }
 
-function extend(chain: TrackPoint[], cands: Candidate[][], times: number[], opt: TrackOptions): TrackPoint[] {
+function extend(chain: TrackPoint[], cands: Candidate[][], times: number[], opt: TrackOptions, frameTime: number): TrackPoint[] {
   let gap = 0;
   let bounced = false;
   for (let i = chain[chain.length - 1].i + 1; i < cands.length; i++) {
     const last = chain[chain.length - 1];
     const prev = chain[chain.length - 2];
-    const dtPrev = last.i - prev.i;
+    const dtPrev = (last.t - prev.t) / frameTime;
     const vx = (last.x - prev.x) / dtPrev;
     const vy = (last.y - prev.y) / dtPrev;
-    const steps = i - last.i;
+    const steps = (times[i] - last.t) / frameTime;
+    if (!(steps > 0)) continue;
     const px = last.x + vx * steps;
     const py = last.y + vy * steps;
     const speed = Math.hypot(vx, vy);
@@ -267,8 +272,10 @@ function extend(chain: TrackPoint[], cands: Candidate[][], times: number[], opt:
 function scoreTrack(chain: TrackPoint[], scoreWeight: number): number {
   let jerk = 0;
   for (let k = 2; k < chain.length; k++) {
-    const ax = chain[k].x - 2 * chain[k - 1].x + chain[k - 2].x;
-    const ay = chain[k].y - 2 * chain[k - 1].y + chain[k - 2].y;
+    const a = chain[k - 2], b = chain[k - 1], c = chain[k];
+    const ratio = (c.t - b.t) / Math.max(1e-9, b.t - a.t);
+    const ax = c.x - b.x - (b.x - a.x) * ratio;
+    const ay = c.y - b.y - (b.y - a.y) * ratio;
     jerk += Math.hypot(ax, ay);
   }
   let path = 0;

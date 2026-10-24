@@ -1,9 +1,9 @@
 "use client";
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
-import { analyzeFrames, type BallAnalysis } from "@/lib/tracking/analyze";
+import type { BallAnalysis } from "@/lib/tracking/analyze";
 import { clipWindows, deliveryId } from "@/lib/tracking/deliveries";
-import { findImpacts, isSpeech, pickShots, refineContact, type Sound } from "@/lib/tracking/hits";
+import { pickShots, selectSounds, type Sound } from "@/lib/tracking/hits";
 import { DEFAULT_SETUP, lengthM, lineCm, speedKmh, type Setup } from "@/lib/tracking/metrics";
 import { extractAudio, releaseEngine } from "@/lib/video/ffmpeg";
 import { captureFrames } from "@/lib/video/frames";
@@ -17,6 +17,7 @@ import { captureFrames } from "@/lib/video/frames";
 export type ClipSettings = {
   /** How loud a sound must be to make a clip, in dB below the session's big hits (0 = only the loudest). */
   threshold: number;
+  noisy: boolean;
   /** After a clip, sounds within this many seconds are skipped (back-to-back noise from the same ball). */
   gap: number;
   leadIn: number;
@@ -86,7 +87,7 @@ export function useVideo(): Ctx {
   return v;
 }
 
-const DEFAULT_SETTINGS: ClipSettings = { threshold: -25, gap: 3, leadIn: 1, length: 2.5 };
+const DEFAULT_SETTINGS: ClipSettings = { threshold: -25, noisy: false, gap: 3, leadIn: 1, length: 2.5 };
 const DEFAULT_TRACKING: TrackingSetup = { ...DEFAULT_SETUP, stumps: null };
 
 const emptyMarks = (): Marks => ({
@@ -120,9 +121,10 @@ export function VideoProvider({ children }: { children: React.ReactNode }) {
   const [overlay, setOverlay] = useState(true);
   const playerRef = useRef<HTMLVideoElement | null>(null);
   const loadToken = useRef(0);
+  const scanner = useRef<Worker | null>(null);
 
   useEffect(() => setSetupState(loadSetup()), []);
-  useEffect(() => releaseEngine, []);
+  useEffect(() => () => { scanner.current?.terminate(); releaseEngine(); }, []);
 
   const setSetup = useCallback((s: TrackingSetup) => {
     setSetupState(s);
@@ -133,6 +135,8 @@ export function VideoProvider({ children }: { children: React.ReactNode }) {
 
   const clearFile = useCallback(() => {
     loadToken.current++;
+    scanner.current?.terminate();
+    scanner.current = null;
     setFile(null);
     setUrl((old) => {
       if (old) URL.revokeObjectURL(old);
@@ -173,15 +177,20 @@ export function VideoProvider({ children }: { children: React.ReactNode }) {
       extractAudio(f, (p) => progress(p * 0.6))
         .then(async (res) => {
           if (token !== loadToken.current) return;
-          const impacts = await findImpacts(res.pcm, res.sampleRate, (p) => progress(0.6 + p * 0.4));
+          const impacts = await new Promise<Sound[]>((resolve, reject) => {
+            const worker = new Worker(new URL("../../lib/video/audio-worker.ts", import.meta.url), { type: "module" });
+            scanner.current = worker;
+            const finish = () => { worker.terminate(); if (scanner.current === worker) scanner.current = null; };
+            worker.onmessage = (event) => {
+              if (event.data.progress != null) progress(0.6 + event.data.progress * 0.4);
+              if (event.data.sounds) { finish(); resolve(event.data.sounds); }
+              if (event.data.error) { finish(); reject(new Error(event.data.error)); }
+            };
+            worker.onerror = () => { finish(); reject(new Error("Audio scan stopped. Try opening the video again.")); };
+            worker.postMessage({ pcm: res.pcm.buffer, sampleRate: res.sampleRate }, [res.pcm.buffer]);
+          });
           if (token !== loadToken.current) return;
-          // Every sharp sound that isn't talking, pinned to its exact click. Which of them become
-          // clips depends on the sliders, so that part runs instantly when they move.
-          setSounds(
-            impacts
-              .filter((e) => e.riseDb > 10 && !isSpeech(e))
-              .map((e) => ({ t: refineContact(res.pcm, res.sampleRate, e.t), levelDb: e.levelDb })),
-          );
+          setSounds(impacts);
           setFps(res.fps);
           setAudio({ status: "ready", progress: 1, error: null });
         })
@@ -198,8 +207,8 @@ export function VideoProvider({ children }: { children: React.ReactNode }) {
   );
 
   const deliveries = useMemo(
-    () => (sounds ? pickShots(sounds, settings.threshold, settings.gap) : []),
-    [sounds, settings.threshold, settings.gap],
+    () => (sounds ? pickShots(selectSounds(sounds, settings.noisy), settings.threshold, settings.gap) : []),
+    [sounds, settings.threshold, settings.gap, settings.noisy],
   );
 
   const clips: Clip[] = useMemo(() => {
@@ -251,6 +260,8 @@ export function VideoProvider({ children }: { children: React.ReactNode }) {
   const analyze = useCallback(
     async (clip: Clip) => {
       if (!url) return;
+      if (analyses[clip.id]?.status === "running") return;
+      const token = loadToken.current;
       const id = clip.id;
       setAnalyses((a) => ({ ...a, [id]: { status: "running", progress: 0, result: null, error: null } }));
       try {
@@ -263,10 +274,12 @@ export function VideoProvider({ children }: { children: React.ReactNode }) {
           start,
           end,
           360,
-          (p) => setAnalyses((a) => ({ ...a, [id]: { ...a[id], progress: p * 0.9 } })),
+          (p) => { if (token === loadToken.current) setAnalyses((a) => ({ ...a, [id]: { ...a[id], progress: p * 0.9 } })); },
           fps,
         );
         if (frames.length < 6) throw new Error("Too few frames in this clip to track the ball.");
+        if (token !== loadToken.current) return;
+        const { analyzeFrames } = await import("@/lib/tracking/analyze");
         const result = analyzeFrames(frames, times, clip.contact);
         setAnalyses((a) => ({ ...a, [id]: { status: "done", progress: 1, result, error: null } }));
         setMarks((all) => {
@@ -283,13 +296,14 @@ export function VideoProvider({ children }: { children: React.ReactNode }) {
           };
         });
       } catch (err) {
+        if (token !== loadToken.current) return;
         setAnalyses((a) => ({
           ...a,
           [id]: { status: "error", progress: 0, result: null, error: (err as Error).message || "Tracking failed." },
         }));
       }
     },
-    [url, meta, fps],
+    [url, meta, fps, analyses],
   );
 
   const seek = useCallback((t: number, play = false) => {

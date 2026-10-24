@@ -99,13 +99,13 @@ export function BallTracking() {
           <div className="grid gap-px bg-line sm:grid-cols-3">
             <Stat
               tone="dark"
-              label="Speed"
+              label="Timing speed estimate"
               value={fmt.num(m.speed)}
               unit="km/h"
               note={m.speed != null ? (unchecked ? "Uses auto marks: check them below" : "Average, release to contact") : "Needs release and contact"}
             />
             <Stat
-              label="Length"
+              label="Timing length estimate"
               value={fmt.num(m.length, 1)}
               unit="m"
               note={m.length != null ? `${lengthZone(m.length)} · from the batter's stumps` : "Needs a bounce too"}
@@ -234,8 +234,8 @@ export function BallTracking() {
           </Panel>
           <Panel title="How the numbers work">
             <ul className="space-y-2 text-sm text-slate">
-              <li><b className="text-ink">Speed</b> is the distance above divided by the time from release to bat contact: an average over the flight, so a little below release speed.</li>
-              <li><b className="text-ink">Length</b> assumes the ball keeps that speed until it bounces.</li>
+              <li><b className="text-ink">Speed</b> divides the assumed distance by release-to-contact time. It is not radar or a measured 3D flight speed. The first tracked point may be after the actual release.</li>
+              <li><b className="text-ink">Length</b> assumes constant horizontal speed and a known contact position. This is not a calibrated bounce measurement.</li>
               <li><b className="text-ink">Line</b> needs a camera directly behind the stumps and the stumps marked.</li>
               <li>Check every auto mark with the frame buttons. One frame at 30 fps is 33 ms, about 5% of the speed.</li>
             </ul>

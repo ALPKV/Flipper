@@ -143,3 +143,6 @@ public/dev-samples/
 public/vendor/
 # Local editor/agent settings
 .claude/
+
+.tools/
+.scratch/

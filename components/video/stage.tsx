@@ -11,10 +11,12 @@ export function Stage({
   clip,
   calibrating,
   onCalibrate,
+  showAnalysis = true,
 }: {
   clip: Clip | null;
   calibrating?: boolean;
   onCalibrate?: (x: number) => void;
+  showAnalysis?: boolean;
 }) {
   const { url, meta, playerRef, overlay, setOverlay, analyses, marks, setup, clips, select } = useVideo();
   // Set when playback starts at a clip's start (Play clip, or Play in the list): stop at its end.
@@ -94,7 +96,7 @@ export function Stage({
     const X = (x: number) => ox + x * vw;
     const Y = (y: number) => oy + y * vh;
 
-    if (setup.stumps && (calibrating || overlay)) {
+    if (setup.stumps && (calibrating || (overlay && showAnalysis))) {
       ctx.strokeStyle = "#ffc700";
       ctx.lineWidth = 2;
       for (const x of [setup.stumps.leftX, setup.stumps.rightX]) {
@@ -106,7 +108,7 @@ export function Stage({
       }
       ctx.setLineDash([]);
     }
-    if (!overlay || !analysis || analysis.points.length === 0) return;
+    if (!showAnalysis || !overlay || !analysis || analysis.points.length === 0) return;
 
     const pts = analysis.points.filter((p) => p.t <= time + 1e-3);
     // Fading trail of where the ball has been, then the ball now.
@@ -117,11 +119,13 @@ export function Stage({
       ctx.strokeStyle = `rgba(255, 199, 0, ${Math.max(0.35, 1 - age * 1.5)})`;
       ctx.lineWidth = 4;
       ctx.lineCap = "round";
+      ctx.setLineDash(b.t - a.t > 1.8 / analysis.fps ? [4, 5] : []);
       ctx.beginPath();
       ctx.moveTo(X(a.x), Y(a.y));
       ctx.lineTo(X(b.x), Y(b.y));
       ctx.stroke();
     }
+    ctx.setLineDash([]);
     for (const p of pts) {
       ctx.fillStyle = "#00175f";
       ctx.beginPath();
@@ -159,7 +163,7 @@ export function Stage({
       ctx.fillStyle = "#ffffff";
       ctx.fillText(text, ox + 24, oy + 42);
     }
-  }, [analysis, overlay, time, setup.stumps, calibrating, speed, playerRef]);
+  }, [analysis, overlay, time, setup.stumps, calibrating, speed, playerRef, showAnalysis]);
 
   useEffect(() => {
     draw();
@@ -236,8 +240,8 @@ export function Stage({
         />
       ) : null}
       <div className="flex flex-wrap items-center gap-2 border-t border-white/10 px-3 py-2 text-white">
-        <ToggleTracking on={overlay} onChange={setOverlay} />
-        <div className="mx-1 h-6 w-px bg-white/15" />
+        {showAnalysis ? <ToggleTracking on={overlay} onChange={setOverlay} /> : null}
+        {showAnalysis ? <div className="mx-1 h-6 w-px bg-white/15" /> : null}
         <IconBtn label="Back one frame" onClick={() => step(-1)}>◀︎ 1F</IconBtn>
         <IconBtn label="Forward one frame" onClick={() => step(1)}>1F ▶︎</IconBtn>
         {clip ? <IconBtn label="Play this clip" onClick={playClip}>Play clip</IconBtn> : null}

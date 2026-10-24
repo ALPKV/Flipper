@@ -1,576 +1,169 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
-import {
-  canSaveToPhotos,
-  download,
-  estimateBytes,
-  exportClip,
-  exportReel,
-  isApple,
-  isOutOfMemory,
-  isTouchDevice,
-  MAX_PARTS,
-  reelBudget,
-  saveToPhotos,
-} from "@/lib/video/ffmpeg";
-import { Button, Empty, Meter, Panel, Stat, Tag } from "../ui";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { canSaveToPhotos, download, exportClip, exportReel, isApple, isTouchDevice, releaseEngine, saveToPhotos } from "@/lib/video/ffmpeg";
+import { planExport, type ExportQuality } from "@/lib/video/export-plan";
+import { Button, Empty, Meter, Panel } from "../ui";
 import { Stage } from "./stage";
 import { FileBar, VideoDrop, clock } from "./video-drop";
 import { useVideo, type Clip } from "./video-context";
 
-/** One part of the highlights: clips [from, to) of the ticked clips. */
-/** Quick settings for the sensitivity slider. */
-const SENSITIVITY_PRESETS = [
-  { label: "Normal", threshold: -25, note: "Every shot, soft ones too" },
-  { label: "Big hits only", threshold: -10, note: "Just the loudest shots" },
-];
+const subscribe = () => () => {};
+const serverFalse = () => false;
 
-type Reel = { url: string; blob: Blob; clips: number; seconds: number; part: number; from: number; to: number };
-type Ready = { blob: Blob; name: string; label: string };
-
-/** Splits the clips, in order, into groups that each make a video small enough for this device. */
-function splitForMemory(clips: Clip[], bytes: (c: Clip) => number, budget: number): Clip[][] {
-  const groups: Clip[][] = [];
-  let size = Infinity;
-  for (const c of clips) {
-    const b = bytes(c);
-    if (size + b > budget) {
-      groups.push([]);
-      size = 0;
-    }
-    groups[groups.length - 1].push(c);
-    size += b;
-  }
-  return groups;
-}
+type Output = { blob: Blob; url: string; name: string; signature: string };
 
 export function Highlights() {
   const v = useVideo();
   const router = useRouter();
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [reelProgress, setReelProgress] = useState(0);
+  const [progress, setProgress] = useState(0);
   const [skip, setSkip] = useState<Set<string>>(new Set());
-  const [reel, setReel] = useState<Reel | null>(null);
-  // Shrinks the parts after a part runs out of memory anyway, for the rest of this video.
-  const [scale, setScale] = useState(1);
-  const [savedPart, setSavedPart] = useState<number | null>(null);
-  const [touch] = useState(isTouchDevice);
-  const [bigParts, setBigParts] = useState(() => {
-    try {
-      return localStorage.getItem("flipper.bigParts") === "1";
-    } catch {
-      return false;
-    }
-  });
-  function chooseBigParts(on: boolean) {
-    setBigParts(on);
-    setScale(1);
-    try {
-      localStorage.setItem("flipper.bigParts", on ? "1" : "0");
-    } catch {}
-  }
-  // Which part is being made, and when it started, for the progress line.
-  const [building, setBuilding] = useState<{ part: number; of: number; clips: number } | null>(null);
-  const startedAt = useRef(0);
-  // A single clip made on a phone, waiting for a tap to save it (the share sheet needs a fresh tap).
-  const [ready, setReady] = useState<Ready | null>(null);
-  const [shareable] = useState(canSaveToPhotos);
-  const photosLabel = isApple() ? "Save to Photos" : "Save to gallery";
+  const [undo, setUndo] = useState<string | null>(null);
+  const [output, setOutput] = useState<Output | null>(null);
+  const [quality, setQuality] = useState<ExportQuality>("auto");
+  const [tracking, setTracking] = useState(false);
+  const touch = useSyncExternalStore(subscribe, isTouchDevice, serverFalse);
+  const shareable = useSyncExternalStore(subscribe, canSaveToPhotos, serverFalse);
+  const [trackProgress, setTrackProgress] = useState<string | null>(null);
+  const generation = useRef(0);
+  const currentFile = useRef(v.file);
+  const trackingCanceled = useRef(false);
+  useEffect(() => { currentFile.current = v.file; generation.current++; trackingCanceled.current = true; }, [v.file]);
 
-  // Free the previous highlights video's memory when it is replaced or the page closes.
+
   useEffect(() => () => {
-    if (reel) URL.revokeObjectURL(reel.url);
-  }, [reel]);
+    generation.current++;
+    trackingCanceled.current = true;
+  }, []);
+  useEffect(() => () => { if (output) URL.revokeObjectURL(output.url); }, [output]);
 
-  // A new or removed video starts over: nothing made from the old one is kept.
   const [forFile, setForFile] = useState(v.file);
   if (forFile !== v.file) {
-    setForFile(v.file);
-    setReel(null);
-    setReady(null);
-    setSkip(new Set());
-    setError(null);
-    setScale(1);
+    setForFile(v.file); setSkip(new Set()); setOutput(null); setError(null); setBusy(null); setTrackProgress(null); setUndo(null);
   }
 
   if (!v.file) return <VideoDrop />;
-
+  const file = v.file;
   const selected = v.clips.find((c) => c.id === v.selectedId) ?? null;
   const included = v.clips.filter((c) => !skip.has(c.id));
-  const total = included.reduce((a, c) => a + (c.end - c.start), 0);
-  const base = v.file.name.replace(/\.[^.]+$/, "");
-  const fileSize = v.file.size;
-  // If the browser can't tell the video's length, the last clip is close to the end of the session.
-  const lastEnd = v.clips.reduce((a, c) => Math.max(a, c.end), 0);
-  const duration = v.meta?.duration && Number.isFinite(v.meta.duration) ? v.meta.duration : lastEnd + 5;
-  const bytes = (c: Clip) => estimateBytes(fileSize, duration, c.end - c.start, 1, false);
-  const estimate = included.reduce((a, c) => a + bytes(c), 0);
-  const budget = reelBudget(estimate, bigParts);
-  const groups = splitForMemory(included, bytes, budget * scale);
-  const seconds = (g: Clip[]) => g.reduce((a, c) => a + (c.end - c.start), 0);
-  // Parts left after the current one, at the current part size.
-  const remaining = reel ? splitForMemory(included.slice(reel.to), bytes, budget * scale).length : 0;
-  const totalParts = reel ? reel.part + 1 + remaining : groups.length;
-  const reelName = (part: number) => (totalParts > 1 ? `${base}_highlights_part${part + 1}.mp4` : `${base}_highlights.mp4`);
+  const seconds = included.reduce((sum, c) => sum + c.end - c.start, 0);
+  const duration = v.meta?.duration ?? v.clips.at(-1)?.end ?? 1;
+  const base = file.name.replace(/\.[^.]+$/, "");
+  const plan = planExport(file.size, duration, seconds, included.length, quality, touch);
+  const signature = `${quality}|${included.map((c) => `${c.id}:${c.start}:${c.end}`).join("|")}`;
+  const ready = output?.signature === signature ? output : null;
+  const scanning = v.audio.status === "loading";
 
   function toggle(id: string) {
-    setSkip((s) => {
-      const n = new Set(s);
-      if (n.has(id)) n.delete(id);
-      else n.add(id);
-      return n;
-    });
+    setSkip((old) => { const next = new Set(old); if (next.has(id)) next.delete(id); else next.add(id); return next; });
   }
-
-  /**
-   * Makes the part that starts at ticked clip `from`. If the device still runs out of memory, the
-   * part is made again with half as many clips, down to a single clip, without asking.
-   */
-  function buildReel(from = 0, part = 0) {
-    if (from >= included.length) return;
-    // Let go of the previous part first so two are never in memory at once.
-    setReel(null);
-    void run("reel", async () => {
-      let s = scale;
-      for (;;) {
-        const group = splitForMemory(included.slice(from), bytes, budget * s)[0];
-        setBuilding({ part, of: part + splitForMemory(included.slice(from), bytes, budget * s).length, clips: group.length });
-        startedAt.current = performance.now();
-        setReelProgress(0);
-        try {
-          const blob = await exportReel(v.file!, group, setReelProgress);
-          setReel({
-            url: URL.createObjectURL(blob),
-            blob,
-            clips: group.length,
-            seconds: seconds(group),
-            part,
-            from,
-            to: from + group.length,
-          });
-          return;
-        } catch (err) {
-          if (!isOutOfMemory(err) || group.length === 1) throw err;
-          s /= 2;
-          setScale(s);
-        }
-      }
-    }).finally(() => setBuilding(null));
-  }
-
-  function nextPart(r: Reel) {
-    if (r.to < included.length) buildReel(r.to, r.part + 1);
-  }
-
-  /** Saving a part starts the next one, so a long session needs one tap per part. */
-  function savePart(r: Reel, how: "photos" | "download") {
-    const name = reelName(r.part);
-    if (how === "download") {
-      download(r.blob, name);
-      setSavedPart(r.part);
-      // Give the browser a moment to start the download before the next part takes the memory.
-      setTimeout(() => nextPart(r), 1500);
-      return;
-    }
-    void (async () => {
-      let shared = false;
-      await run("share", async () => {
-        shared = await saveToPhotos(r.blob, name);
-      });
-      if (shared) {
-        setSavedPart(r.part);
-        nextPart(r);
-      }
-    })();
-  }
-
-  function save(blob: Blob, name: string) {
-    void run("share", async () => {
-      await saveToPhotos(blob, name);
-    });
-  }
-
-  function play(c: Clip) {
-    v.select(c.id);
-    v.seek(c.start, true);
-  }
-
-  function timeLeft(): string {
-    const elapsed = (performance.now() - startedAt.current) / 1000;
-    if (reelProgress < 0.08 || elapsed < 4) return "working out time left";
-    const left = (elapsed * (1 - reelProgress)) / reelProgress;
-    return left < 60 ? "under a minute left" : `about ${Math.round(left / 60)} min left`;
-  }
-
+  function play(c: Clip) { v.select(c.id); v.seek(c.start, true); }
   async function run(label: string, job: () => Promise<void>) {
-    setBusy(label);
-    setError(null);
-    try {
-      await job();
-    } catch (err) {
-      setError((err as Error).message || "Export failed.");
-    } finally {
-      setBusy(null);
-    }
+    const token = ++generation.current;
+    setBusy(label); setError(null); setProgress(0);
+    try { await job(); }
+    catch (err) { if (generation.current === token) setError(err instanceof Error ? err.message : "Something went wrong. Try again."); }
+    finally { if (generation.current === token) setBusy(null); }
   }
+  function build() {
+    const snapshot = [...included];
+    void run("export", async () => {
+      const token = generation.current;
+      const blob = await exportReel(file, snapshot, (p) => {
+        if (generation.current === token) setProgress(p);
+      }, { precise: plan.precise });
+      if (token !== generation.current || file !== currentFile.current) return;
+      setOutput({ blob, url: URL.createObjectURL(blob), name: `${base}_highlights.mp4`, signature });
+    });
+  }
+  function cancel() {
+    generation.current++; setBusy(null); setProgress(0);
+    releaseEngine();
+    setError("Export canceled. Your clips are still here.");
+  }
+  function single(c: Clip, index: number) {
+    void run("single", async () => {
+      const token = generation.current;
+      const blob = await exportClip(file, c.start, c.end - c.start);
+      if (generation.current !== token || file !== currentFile.current) return;
+      setOutput({ blob, url: URL.createObjectURL(blob), name: `${base}_clip${index + 1}.mp4`, signature: `single:${c.id}` });
+    });
+  }
+  async function trackSelected() {
+    trackingCanceled.current = false;
+    const todo = included.filter((c) => v.analyses[c.id]?.status !== "done");
+    try {
+      for (let i = 0; i < todo.length; i++) {
+        if (trackingCanceled.current || currentFile.current !== file) break;
+        setTrackProgress(`Tracking ${i + 1} of ${todo.length}`);
+        await v.analyze(todo[i]);
+      }
+    } finally { if (currentFile.current === file) setTrackProgress(null); }
+  }
+  const saving = output && (ready || output.signature.startsWith("single:")) ? output : null;
 
   return (
     <div className="space-y-5">
       <FileBar />
-      <div className="grid gap-px bg-line sm:grid-cols-3">
-        <Stat label="Clips found" value={v.clips.length} note={`${included.length} in the highlights video`} />
-        <Stat label="Highlights length" value={clock(total)} />
-        <Stat label="Sensitivity" value={`${v.settings.threshold} dB`} note={`Skips ${v.settings.gap.toFixed(1)} s after each clip`} />
+      <div className="flex flex-wrap items-center justify-between gap-4 border border-line bg-white p-4">
+        <div><p className="display text-2xl font-bold text-navy">{scanning ? "Finding your shots…" : `${v.clips.length} clips to review`}</p>
+          <p className="text-sm text-slate">Play a clip, untick any noise, then save one highlights video. No uploads.</p></div>
+        <label className="flex max-w-sm items-start gap-3 text-sm">
+          <input type="checkbox" role="switch" className="mt-1 accent-[#00175f]" checked={tracking} onChange={(e) => setTracking(e.target.checked)} />
+          <span><b className="block">Ball tracking + timing estimates</b><span className="text-xs text-mute">Optional and experimental. Off by default so clipping stays fast.</span></span>
+        </label>
       </div>
-
-      <div className="grid grid-cols-[minmax(0,1fr)] gap-5 lg:grid-cols-[minmax(0,1fr)_320px]">
-        <div className="space-y-5">
-          <Stage clip={selected} />
-          {v.clips.length > 0 ? (
-            <Panel title="Highlights video">
-              {reel ? (
-                <div className="grid gap-4 md:grid-cols-[minmax(0,240px)_1fr]">
-                  <video src={reel.url} controls playsInline className="w-full bg-navy-950" />
-                  <div className="space-y-3">
-                    <p className="display text-2xl font-extrabold text-navy">
-                      {totalParts > 1 ? `Part ${reel.part + 1} of ${totalParts} is ready` : "Your highlights are ready"}
-                    </p>
-                    <p className="text-sm text-slate">
-                      {reel.clips} clips · about {clock(reel.seconds)} · {(reel.blob.size / 1_048_576).toFixed(1)} MB.
-                      {reel.to < included.length
-                        ? " Save it and the next part starts straight away."
-                        : totalParts > 1
-                          ? " That's the last part."
-                          : " Watch it here, then save it."}
-                    </p>
-                    <div className="flex flex-wrap gap-2">
-                      {shareable ? (
-                        <Button tone="gold" disabled={busy === "share"} onClick={() => savePart(reel, "photos")}>
-                          {photosLabel}
-                        </Button>
-                      ) : null}
-                      <Button tone={shareable ? "ghost" : "gold"} onClick={() => savePart(reel, "download")}>
-                        Download video
-                      </Button>
-                      {reel.to < included.length ? (
-                        <Button tone={savedPart === reel.part ? "gold" : "ghost"} disabled={busy != null} onClick={() => nextPart(reel)}>
-                          Make part {reel.part + 2}
-                        </Button>
-                      ) : null}
-                      <Button tone="ghost" onClick={() => setReel(null)}>
-                        Start over
-                      </Button>
-                    </div>
-                  </div>
-                </div>
-              ) : (
-                <div className="flex flex-wrap items-center gap-4">
-                  <div className="min-w-[200px] flex-1">
-                    <p className="text-sm text-slate">
-                      Joins the <b className="text-ink">{included.length}</b> ticked clips below, in order, into one video (
-                      {clock(total)}). Untick any you don&apos;t want.
-                    </p>
-                    <p className="mt-2 border-l-4 border-gold bg-gold/10 px-3 py-2 text-sm text-ink">
-                      {groups.length > MAX_PARTS ? (
-                        <>
-                          At about {Math.round(estimate / 1_048_576)} MB this would take <b>{groups.length} parts</b> on this
-                          device, more than the {MAX_PARTS} it can do. {touch && !bigParts ? "Turn on Bigger parts below, untick" : "Untick"}{" "}
-                          clips you don&apos;t need (or pick <b>Big hits</b>), or make it on a computer.
-                        </>
-                      ) : groups.length > 1 ? (
-                        <>
-                          At about {Math.round(estimate / 1_048_576)} MB this comes in <b>{groups.length} parts</b> of up to{" "}
-                          {Math.round((budget * scale) / 1e6)} MB, so your device never runs out of memory. Save each part and
-                          the next one starts by itself.
-                        </>
-                      ) : (
-                        <>About {Math.round(estimate / 1_048_576)} MB: small enough to make in one go.</>
-                      )}
-                    </p>
-                    {touch ? (
-                      <label className="mt-2 flex items-start gap-2 text-sm">
-                        <input type="checkbox" className="mt-1" checked={bigParts} onChange={(e) => chooseBigParts(e.target.checked)} />
-                        <span>
-                          <b>Bigger parts</b>: up to 750 MB each, like on a computer, so fewer files. Works on most recent
-                          phones. If the page reloads while making a part, turn this off.
-                        </span>
-                      </label>
-                    ) : null}
-
-                  </div>
-                  <Button
-                    tone="gold"
-                    disabled={busy != null || included.length === 0 || groups.length > MAX_PARTS}
-                    onClick={() => buildReel(0, 0)}
-                  >
-                    {busy === "reel"
-                      ? building && building.of > 1
-                        ? `Part ${building.part + 1} of ${building.of} · ${Math.round(reelProgress * 100)}%`
-                        : `Building ${Math.round(reelProgress * 100)}%`
-                      : groups.length > 1
-                        ? `Create part 1 of ${groups.length}`
-                        : "Create highlights video"}
-                  </Button>
-                </div>
-              )}
-              {busy === "reel" ? (
-                <div className="mt-3 space-y-1.5">
-                  <p className="text-sm text-slate">
-                    {building && building.of > 1 ? `Making part ${building.part + 1} of ${building.of}` : "Making your highlights video"}
-                    {" · "}
-                    {building && reelProgress >= building.clips / (building.clips + 1) - 1e-6
-                      ? "joining the clips"
-                      : `cutting clip ${Math.min(building?.clips ?? 1, Math.floor(reelProgress * ((building?.clips ?? 0) + 1)) + 1)} of ${building?.clips ?? "?"}`} · {timeLeft()}. Keep this tab open.
-                  </p>
-                  <Meter value={reelProgress} max={1} tone="gold" />
-                </div>
-              ) : null}
-              {error ? <p className="mt-3 border-l-4 border-risk bg-risk/5 px-3 py-2 text-sm text-risk">{error}</p> : null}
-            </Panel>
-          ) : null}
-          {ready ? (
-            <div className="flex flex-wrap items-center gap-3 border-l-4 border-gold bg-white p-4 shadow-sm">
-              <p className="min-w-[160px] flex-1 font-display text-lg font-bold text-navy">{ready.label} is ready</p>
-              <Button tone="gold" size="sm" disabled={busy === "share"} onClick={() => save(ready.blob, ready.name)}>
-                {photosLabel}
-              </Button>
-              <Button tone="ghost" size="sm" onClick={() => download(ready.blob, ready.name)}>
-                Download
-              </Button>
-              <button aria-label="Close" onClick={() => setReady(null)} className="px-2 text-lg leading-none text-mute hover:text-navy">
-                ×
-              </button>
+      {scanning ? <div role="status" className="space-y-2"><p className="text-sm text-slate">Reading audio and checking impacts · {Math.round(v.audio.progress * 100)}%. You can still use the player.</p><Meter value={v.audio.progress} max={1} /></div> : null}
+      {v.audio.status === "error" || v.audio.status === "none" ? <p role="alert" className="border-l-4 border-warn bg-warn/5 p-3 text-sm">{v.audio.error ?? "No readable audio. You can add clips at the playhead."}</p> : null}
+      <div className="grid grid-cols-[minmax(0,1fr)] gap-5 lg:grid-cols-[minmax(0,1fr)_300px]">
+        <div className="min-w-0 space-y-5">
+          <Stage clip={selected} showAnalysis={tracking} />
+          <Panel title="Save your highlights">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div><p className="font-semibold">{included.length} selected · {clock(seconds)} · one MP4</p><p className="mt-1 text-sm text-slate">Review here first. Nothing downloads until you press Save.</p></div>
+              <Button tone="gold" disabled={busy != null || scanning || !included.length || !plan.fits} onClick={build}>{busy === "export" ? `Creating ${Math.round(progress * 100)}%` : ready ? "Rebuild highlights" : "Create highlights video"}</Button>
             </div>
-          ) : null}
-          <Panel
-            title="Clips"
-            flush
-            action={
-              <Button
-                size="sm"
-                tone="ghost"
-                onClick={() => {
-                  v.select(v.addManualClip(v.playhead()).id);
-                }}
-              >
-                Add clip at playhead
-              </Button>
-            }
-          >
-            <AudioNotice />
-            {v.clips.length === 0 ? (
-              v.audio.status === "ready" ? (
-                <div className="p-4">
-                  <Empty title="No shots detected">
-                    Try <b>Everything</b>, scan for balls with no bat sound, or add clips by hand from the playhead.
-                  </Empty>
-                </div>
-              ) : null
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="bg-navy text-left font-display text-[0.8rem] uppercase tracking-wider text-white">
-                      <th className="w-10 px-4 py-2 font-bold">
-                        <span className="sr-only">Include</span>
-                      </th>
-                      <th className="px-2 py-2 font-bold">#</th>
-                      <th className="px-2 py-2 font-bold">Start</th>
-                      <th className="px-2 py-2 font-bold">Contact</th>
-                      <th className="px-2 py-2 font-bold">Found by</th>
-                      <th className="px-4 py-2 text-right font-bold">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {v.clips.map((c, k) => {
-                      const active = c.id === v.selectedId;
-                      return (
-                        <tr
-                          key={c.id}
-                          className={`border-b border-line ${active ? "bg-gold/15" : k % 2 ? "bg-paper/60" : ""} ${skip.has(c.id) ? "text-mute" : ""}`}
-                        >
-                          <td className="px-4 py-2">
-                            <input
-                              type="checkbox"
-                              checked={!skip.has(c.id)}
-                              onChange={() => toggle(c.id)}
-                              aria-label={`Include clip ${k + 1} in the highlights video`}
-                            />
-                          </td>
-                          <td className="px-2 py-2 font-display font-bold text-navy">{String(k + 1).padStart(2, "0")}</td>
-                          <td className="px-2 py-2 tabular-nums">{clock(c.start)}</td>
-                          <td className="px-2 py-2 tabular-nums">{c.contact != null ? clock(c.contact) : "—"}</td>
-                          <td className="w-36 px-2 py-2">
-                            {c.kind === "bat" ? (
-                              <span className="flex items-center gap-2" title={`${Math.round(c.level ?? 0)} dB against your big hits`}>
-                                <Tag>Bat</Tag>
-                                <span className="w-14"><Meter value={Math.max(0, (c.level ?? -40) + 40)} max={40} tone="gold" /></span>
-                              </span>
-                            ) : (
-                              <Tag tone="mute">Manual</Tag>
-                            )}
-                          </td>
-                          <td className="px-4 py-2">
-                            <div className="flex justify-end gap-1.5">
-                              <Button size="sm" tone="ghost" onClick={() => play(c)}>Play</Button>
-                              <Button
-                                size="sm"
-                                tone="ghost"
-                                onClick={() => {
-                                  v.select(c.id);
-                                  router.push("/tracking");
-                                }}
-                              >
-                                Track
-                              </Button>
-                              <Button
-                                size="sm"
-                                tone="ghost"
-                                disabled={busy != null}
-                                onClick={() =>
-                                  run(`clip-${c.id}`, async () => {
-                                    const blob = await exportClip(v.file!, c.start, c.end - c.start);
-                                    const name = `${base}_clip${k + 1}.mp4`;
-                                    if (shareable) setReady({ blob, name, label: `Clip ${k + 1}` });
-                                    else download(blob, name);
-                                  })
-                                }
-                              >
-                                {busy === `clip-${c.id}` ? "…" : "Save"}
-                              </Button>
-                              <Button size="sm" tone="danger" onClick={() => v.removeClip(c.id)} title="Remove this clip">
-                                Not a shot
-                              </Button>
-                            </div>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            )}
+            <label className="mt-4 block text-sm"><span className="label">Export quality</span>
+              <select className="field" value={quality} disabled={busy != null} onChange={(e) => setQuality(e.target.value as ExportQuality)}>
+                <option value="auto">Recommended — one file</option><option value="original">Original quality — faster, larger file</option><option value="compact">Smaller 720p — slower, exact cuts</option>
+              </select>
+            </label>
+            <p className="mt-2 text-xs text-mute">{plan.reason}. Estimated size: {Math.ceil(plan.estimatedBytes / 1e6)} MB.</p>
+            {!plan.fits && included.length ? <p className="mt-2 text-sm text-warn">This selection is too large for a reliable single-file export on this device. {quality === "original" ? "Choose Recommended quality or " : ""}Untick some clips. We will not split it into surprise downloads.</p> : null}
+            {busy === "export" ? <div role="status" className="mt-4 space-y-2"><Meter value={progress} max={1} tone="gold" /><p className="text-xs text-slate">{progress < included.length / (included.length + 1) ? `Cutting clip ${Math.min(included.length, Math.floor(progress * (included.length + 1)) + 1)} of ${included.length}` : "Joining clips"}. Keep this tab open.{plan.precise ? " Smaller files take longer to encode." : ""}</p><Button tone="ghost" size="sm" onClick={cancel}>Cancel export</Button></div> : null}
+            {saving ? <div className="mt-4 space-y-3 border-t border-line pt-4"><video src={saving.url} controls playsInline className="max-h-64 w-full bg-navy-950" /><p className="text-sm"><b>Ready:</b> {saving.name} · {(saving.blob.size / 1e6).toFixed(1)} MB</p><div className="flex flex-wrap gap-2"><Button tone="gold" disabled={busy != null} onClick={() => download(saving.blob, saving.name)}>Save video</Button>{shareable ? <Button tone="ghost" disabled={busy != null} onClick={() => run("share", async () => { await saveToPhotos(saving.blob, saving.name); })}>{isApple() ? "Save to Photos" : "Share to gallery"}</Button> : null}</div></div> : null}
+            {error ? <p role="alert" className="mt-3 border-l-4 border-risk bg-risk/5 p-3 text-sm text-risk">{error}{/memory/.test(error) && quality !== "compact" ? " Try Smaller 720p or select fewer clips." : ""}</p> : null}
+          </Panel>
+          <Panel title="Review clips" action={<Button size="sm" tone="ghost" disabled={busy != null} onClick={() => v.select(v.addManualClip(v.playhead()).id)}>Add at playhead</Button>}>
+            <div className="mb-3 flex flex-wrap items-center gap-2 text-sm"><Button size="sm" tone="ghost" disabled={busy != null} onClick={() => setSkip(new Set())}>Select all</Button><Button size="sm" tone="ghost" disabled={busy != null} onClick={() => setSkip(new Set(v.clips.map((c) => c.id)))}>Select none</Button>{undo ? <Button size="sm" tone="ghost" disabled={busy != null} onClick={() => { setSkip((s) => { const n = new Set(s); n.delete(undo); return n; }); setUndo(null); }}>Undo exclusion</Button> : null}</div>
+            {!v.clips.length && !scanning ? <Empty title="No shots found">Try the Softer shots preset, turn off Noisy hall filtering, or add a clip at the playhead. Audio detection can miss leaves and balls without bat contact.</Empty> : null}
+            <ol className="divide-y divide-line">
+              {v.clips.map((c, i) => <li key={c.id} className={`flex flex-wrap items-center gap-3 py-3 ${c.id === v.selectedId ? "bg-gold/10" : ""} ${skip.has(c.id) ? "opacity-60" : ""}`}>
+                <input type="checkbox" className="accent-[#00175f]" disabled={busy != null} checked={!skip.has(c.id)} onChange={() => toggle(c.id)} aria-label={`Include clip ${i + 1}`} />
+                <button className="min-w-0 flex-1 text-left" onClick={() => play(c)}><span className="block font-semibold text-navy">Clip {String(i + 1).padStart(2, "0")}</span><span className="text-xs tabular-nums text-slate">{clock(c.start)} · {(c.end - c.start).toFixed(1)}s{skip.has(c.id) ? " · excluded" : ""}</span></button>
+                <div className="flex flex-wrap gap-1"><Button size="sm" tone="ghost" onClick={() => play(c)}>Play</Button>{tracking ? <Button size="sm" tone="ghost" onClick={() => { v.select(c.id); router.push("/tracking"); }}>{v.analyses[c.id]?.status === "done" ? "View track" : "Track"}</Button> : null}<Button size="sm" tone="ghost" disabled={busy != null || scanning} onClick={() => single(c, i)}>Export clip</Button><Button size="sm" tone="ghost" disabled={busy != null || skip.has(c.id)} onClick={() => { setSkip((s) => new Set(s).add(c.id)); setUndo(c.id); }}>Not a shot</Button></div>
+              </li>)}
+            </ol>
           </Panel>
         </div>
-
-        <aside className="space-y-5">
+        <aside className="min-w-0 space-y-5">
           <Panel title="Detection">
-            <p className="text-sm text-slate">A sound louder than the sensitivity makes a clip. Sounds right after a clip are skipped.</p>
-            <div className="mt-3 grid grid-cols-2 gap-1.5">
-              {SENSITIVITY_PRESETS.map((p) => {
-                const on = v.settings.threshold === p.threshold;
-                return (
-                  <button
-                    key={p.label}
-                    onClick={() => v.setSettings({ ...v.settings, threshold: p.threshold })}
-                    className={`border px-2 py-2 text-left text-xs ${on ? "border-navy bg-navy text-white" : "border-line bg-white text-ink hover:border-navy"}`}
-                  >
-                    <span className="block font-display text-sm font-bold uppercase tracking-wide">{p.label}</span>
-                    <span className={on ? "text-white/70" : "text-mute"}>{p.note}</span>
-                  </button>
-                );
-              })}
-            </div>
-            <Slider label="Sensitivity" value={v.settings.threshold} min={-40} max={-5} step={1}
-              format={(n) => `${n} dB`} onChange={(n) => v.setSettings({ ...v.settings, threshold: n })} />
-            <p className="mt-1 text-xs text-mute">Lower picks up softer shots (and more noise); higher keeps only big hits.</p>
-            <Slider label="Skip after a clip" value={v.settings.gap} min={1} max={10} step={0.5}
-              format={(n) => `${n.toFixed(1)} s`} onChange={(n) => v.setSettings({ ...v.settings, gap: n })} />
-            <Slider label="Lead-in" value={v.settings.leadIn} min={0.5} max={4} step={0.1} format={(n) => `${n.toFixed(1)} s`}
-              onChange={(n) => v.setSettings({ ...v.settings, leadIn: n })} />
-            <Slider label="Clip length" value={v.settings.length} min={1} max={15} step={0.5} format={(n) => `${n.toFixed(1)} s`}
-              onChange={(n) => v.setSettings({ ...v.settings, length: n })} />
+            <p className="text-sm text-slate">Start with Balanced. Settings update the results without rescanning your video.</p>
+            <label className="mt-3 block"><span className="label">Find shots</span><select className="field" disabled={busy != null} value={String(v.settings.threshold)} onChange={(e) => v.setSettings({ ...v.settings, threshold: Number(e.target.value) })}><option value="-25">Balanced</option><option value="-35">Softer shots — more noise</option><option value="-10">Big hits only</option>{![-25, -35, -10].includes(v.settings.threshold) ? <option value={v.settings.threshold}>Custom</option> : null}</select></label>
+            <label className="mt-4 flex items-start gap-2 text-sm"><input type="checkbox" className="mt-1" disabled={busy != null} checked={v.settings.noisy} onChange={(e) => v.setSettings({ ...v.settings, noisy: e.target.checked })} /><span><b>Noisy hall</b><span className="block text-xs text-mute">Rejects weaker, less sudden sounds. Fewer false clips, but can miss soft shots.</span></span></label>
+            <details className="mt-4 border-t border-line pt-3"><summary className="cursor-pointer text-sm font-semibold text-navy">Fine-tune detection</summary><div className={busy ? "pointer-events-none opacity-50" : ""}><Slider label="Sensitivity" value={v.settings.threshold} min={-40} max={-5} step={1} unit=" dB" onChange={(threshold) => v.setSettings({ ...v.settings, threshold })} /><Slider label="Minimum gap" value={v.settings.gap} min={1} max={10} step={0.5} unit=" s" onChange={(gap) => v.setSettings({ ...v.settings, gap })} /><Slider label="Before contact" value={v.settings.leadIn} min={0.5} max={4} step={0.1} unit=" s" onChange={(leadIn) => v.setSettings({ ...v.settings, leadIn })} /><Slider label="Clip duration" value={v.settings.length} min={1} max={15} step={0.5} unit=" s" onChange={(length) => v.setSettings({ ...v.settings, length })} /></div></details>
           </Panel>
-          <Panel title="Saving videos">
-            <p className="text-sm text-slate">
-              <b className="text-ink">Save</b> on a clip saves just that clip. <b className="text-ink">Create highlights
-              video</b> joins the ticked clips into one. Everything is made on this device; nothing is uploaded.
-            </p>
-            <p className="mt-3 text-sm text-slate">
-              Your video stays only in this tab&apos;s memory. It and anything made from it are wiped when you press
-              Change video or close the tab.
-            </p>
-            {shareable ? (
-              <p className="mt-3 text-sm text-slate">
-                {isApple() ? (
-                  <>
-                    <b className="text-ink">Save to Photos</b> opens the share sheet: tap <b className="text-ink">Save Video</b>{" "}
-                    and it goes straight into your camera roll.
-                  </>
-                ) : (
-                  <>
-                    <b className="text-ink">Save to gallery</b> opens the share sheet: pick your gallery or Google Photos.
-                  </>
-                )}
-              </p>
-            ) : null}
-            <p className="mt-3 text-xs text-mute">The first time, the video engine (about 30 MB) downloads once.</p>
-          </Panel>
+          {tracking ? <Panel title="Optional ball analysis"><p className="text-sm text-slate">Analyze selected clips after the audio scan. This is experimental; a path is not a verified speed measurement.</p><div className="mt-3 flex flex-wrap gap-2"><Button size="sm" disabled={!!trackProgress || busy != null || scanning || !included.length} onClick={trackSelected}>{trackProgress ?? "Analyze selected clips"}</Button>{trackProgress ? <Button size="sm" tone="ghost" onClick={() => { trackingCanceled.current = true; }}>Stop after this clip</Button> : null}</div></Panel> : null}
+          <Panel title="Private by design"><p className="text-sm text-slate">Your recording stays on this device. Review and playback need no downloads. Export only when you are happy with your selection.</p><p className="mt-3 text-xs text-mute">The video engine downloads on first use and is cached when browser storage permits. Closing this tab discards the session.</p></Panel>
         </aside>
       </div>
     </div>
   );
 }
 
-function AudioNotice() {
-  const { audio } = useVideo();
-  if (audio.status === "loading") {
-    return (
-      <div className="space-y-2 border-b border-line p-4">
-        <p className="text-sm text-slate">Listening for bat-on-ball contact… {Math.round(audio.progress * 100)}%</p>
-        <Meter value={audio.progress} max={1} />
-      </div>
-    );
-  }
-  if (audio.status === "none" || audio.status === "error") {
-    return (
-      <p className="border-b border-line bg-warn/5 p-4 text-sm text-warn">
-        {audio.status === "none"
-          ? "This video has no sound, so shots can't be found automatically. Add clips at the playhead instead."
-          : `Audio scan failed: ${audio.error}. You can still add clips by hand.`}
-      </p>
-    );
-  }
-  return null;
+function Slider({ label, value, min, max, step, unit, onChange }: { label: string; value: number; min: number; max: number; step: number; unit: string; onChange: (n: number) => void }) {
+  return <label className="mt-4 block text-sm"><span className="flex justify-between gap-2"><span>{label}</span><span className="tabular-nums">{value}{unit}</span></span><input type="range" min={min} max={max} step={step} value={value} onChange={(e) => onChange(Number(e.target.value))} className="mt-2 w-full accent-[#00175f]" /></label>;
 }
-
-function Slider({
-  label,
-  value,
-  min,
-  max,
-  step,
-  format,
-  onChange,
-}: {
-  label: string;
-  value: number;
-  min: number;
-  max: number;
-  step: number;
-  format: (n: number) => string;
-  onChange: (n: number) => void;
-}) {
-  return (
-    <label className="mt-4 block">
-      <span className="flex justify-between text-sm">
-        <span className="label mb-0">{label}</span>
-        <span className="font-display font-bold tabular-nums text-navy">{format(value)}</span>
-      </span>
-      <input
-        type="range"
-        min={min}
-        max={max}
-        step={step}
-        value={value}
-        onChange={(e) => onChange(Number(e.target.value))}
-        className="mt-1 w-full accent-[#00175f]"
-      />
-    </label>
-  );
-}
-
-/** The optional bowling-action scan: finds misses, leaves and bowled balls that made no bat sound. */

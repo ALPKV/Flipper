@@ -29,9 +29,9 @@ export default function PrivacyPage() {
 
       <Section title="What Flipper keeps">
         <p>
-          Nothing about you on a server: there are no accounts, no database and no sign-in. Your browser keeps two small
-          settings on your own device: your Ball Tracking camera setup and whether you chose bigger parts for highlights
-          videos. There are no advertising, analytics or tracking cookies.
+          Nothing about you on a server: there are no accounts, no database and no sign-in. Your browser keeps your
+          Ball Tracking camera setup locally. It may also cache the video-processing engine to avoid downloading it
+          again. Recordings are not put in that cache. There are no advertising, analytics or tracking cookies.
         </p>
       </Section>
 

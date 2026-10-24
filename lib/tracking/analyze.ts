@@ -42,6 +42,9 @@ export function analyzeFrames(
   { useModel = true }: { useModel?: boolean } = {},
 ): BallAnalysis {
   const n = frames.length;
+  if (n < 3 || times.length !== n || times.some((t, i) => !Number.isFinite(t) || (i > 0 && t <= times[i - 1]))) {
+    throw new Error("Tracking needs at least three frames with increasing presentation timestamps.");
+  }
   const dt = n > 1 ? (times[n - 1] - times[0]) / (n - 1) : 1 / 30;
   const fps = 1 / dt;
   let last = n - 1;

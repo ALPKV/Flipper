@@ -5,9 +5,10 @@
  */
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { findImpacts, isSpeech, pickShots, refineContact } from "../../lib/tracking/hits.ts";
+import { findImpacts, selectSounds, pickShots, refineContact } from "../../lib/tracking/hits.ts";
 
 const dir = process.argv[2];
+if (!dir) throw new Error("Usage: node --experimental-strip-types scripts/deliveries/eval.mts <audio-folder>");
 const labels: Record<string, { releases: number[] }> = JSON.parse(readFileSync(new URL("./labels.json", import.meta.url), "utf8"));
 
 // A delivery counts as found when a clip lands between just before its release and the ball
@@ -32,9 +33,10 @@ for (const [name, { releases }] of Object.entries(labels)) {
   const buf = readFileSync(join(dir, `${name}.s16`));
   const pcm = new Int16Array(buf.buffer, buf.byteOffset, buf.byteLength >> 1);
   const sounds = (await findImpacts(pcm, 16000))
-    .filter((e) => e.riseDb > 10 && !isSpeech(e))
-    .map((e) => ({ t: refineContact(pcm, 16000, e.t), levelDb: e.levelDb }));
+    .filter((e) => e.riseDb > 10)
+    .map((e) => ({ ...e, t: refineContact(pcm, 16000, e.t) }));
+  console.log(name, "Noisy hall, -25 dB, skip 3 s:", score(pickShots(selectSounds(sounds, true), -25, 3).map((s) => s.t), releases));
   for (const gap of [2, 3]) {
-    for (const thr of [-15, -25]) console.log(name, `sensitivity ${thr} dB, skip ${gap} s:`, score(pickShots(sounds, thr, gap).map((s) => s.t), releases));
+    for (const thr of [-15, -25]) console.log(name, `sensitivity ${thr} dB, skip ${gap} s:`, score(pickShots(selectSounds(sounds), thr, gap).map((s) => s.t), releases));
   }
 }

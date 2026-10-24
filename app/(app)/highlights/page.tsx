@@ -2,14 +2,14 @@ import type { Metadata } from "next";
 import { Container, PageHeader } from "@/components/ui";
 import { Highlights } from "@/components/video/highlights";
 
-export const metadata: Metadata = { title: "Highlights" };
+export const metadata: Metadata = { title: "Clip Farmer" };
 
 export default function ClipsPage() {
   return (
     <>
-      <PageHeader eyebrow="Video lab" title="Highlights">
-        Drop in an unedited net session. Flipper listens for bat-on-ball contact and cuts a clip
-        around every shot, ready to review, track or export.
+      <PageHeader eyebrow="Flipper video lab" title="Clip Farmer">
+        Your nets session, without the waiting between shots. Choose a recording, review the clips,
+        and save one highlights video. Ball analysis is optional.
       </PageHeader>
       <Container>
         <Highlights />

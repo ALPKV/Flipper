@@ -61,7 +61,15 @@ export const SPEECH_VOICE = 0.6;
 export const SPEECH_RISE = 0.3;
 
 /** A candidate shot: an impact that isn't talking, at its exact click. */
-export type Sound = { t: number; levelDb: number };
+export type Sound = { t: number; levelDb: number; riseDb?: number; z?: number; voice?: number; voiceBefore?: number };
+
+/** Optional precision mode for speech-heavy halls. A heuristic, not a trained sound classifier. */
+export function selectSounds(sounds: Sound[], noisy = false): Sound[] {
+  return sounds.filter((s) => {
+    if (s.voice != null && s.voiceBefore != null && s.voice > SPEECH_VOICE && s.voice - s.voiceBefore > SPEECH_RISE) return false;
+    return !noisy || (s.riseDb != null && s.z != null && s.riseDb >= 15 && s.z >= 20);
+  });
+}
 
 const N = 512;
 const HOP = 128;
