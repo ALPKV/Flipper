@@ -38,9 +38,9 @@ Repeat for netsB and chatterW. The evaluator reuses the existing broad release m
 |---|---:|---:|---:|---:|
 | netsA | 17/19 | 19/19 | 1 | 0 |
 | netsB | 20/21 | 21/21 | 0 | 1 |
-| chatterW | 8/10 | 9/10 | 4 | 2 |
+| chatterW | 8/10 | 9/10 | 4 | 1 |
 
-These development recordings give 49/50 matched deliveries, with five false candidates and three duplicates. This is not a claim of 98% real-world accuracy.
+These development recordings give 49/50 matched deliveries, with five false candidates and two duplicates. This is not a claim of 98% real-world accuracy.
 
 User review identified audio-only clip starts 0.0, 8.6, and 13.1 seconds in chatterW as false on October 24. These corrections are retained separately in labels.json. Broad release matching alone is insufficient to validate individual clips. The current heuristic still needs review; whole-frame movement is not a bowling-action classifier.
 
@@ -51,3 +51,5 @@ The native playback pass now slows immediately on dropped samples, then seeks th
 Unmatched audio in missing or boundary intervals is labeled **Unverified sound — review to include** and excluded from the default export selection. It remains visible and can be explicitly included; missing frames cannot prove a sound was a real delivery. Visual motion within 1.5 seconds after a matched contact is suppressed as likely follow-through, with the tradeoff that exceptionally rapid successive deliveries could require review.
 
 The evaluator now separately reports suggested exports and candidates needing review, and fails if a user-confirmed false clip returns to automatic selection. It does not hardcode those timestamps into the detector.
+
+Current suggested automatic exports (excluding unverified audio) match 48/50 annotated deliveries across these development sessions, with four false candidates and two duplicates. One additional real delivery remains in the review-only group. This distinguishes finding a candidate from confidently selecting it; the feature is still a heuristic and is not independently validated.
