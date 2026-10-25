@@ -62,6 +62,12 @@
       92.4,
       110.4,
       124.6
-    ]
+    ],
+    "userRejectedClipStarts": [
+      0,
+      8.6,
+      13.1
+    ],
+    "feedbackNote": "User explicitly identified audio-only clips 1, 3, and 4 as false detections on 2026-10-24. Values are clip starts, not release/contact labels. Keep separate from approximate release annotations."
   }
 }

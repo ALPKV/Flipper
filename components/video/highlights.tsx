@@ -56,6 +56,9 @@ export function Highlights() {
   const signature = `${quality}|${included.map((c) => `${c.id}:${c.start}:${c.end}`).join("|")}`;
   const ready = output?.signature === signature ? output : null;
   const scanning = v.audio.status === "loading";
+  const visualScanning = v.deliveryScan.status === "running";
+  const scanResult = v.deliveryScan.result;
+  const coveragePercent = scanResult ? Math.min(100, Math.round(100 * scanResult.covered.reduce((sum, [a, b]) => sum + b - a, 0) / scanResult.duration)) : 0;
 
   function toggle(id: string) {
     setSkip((old) => { const next = new Set(old); if (next.has(id)) next.delete(id); else next.add(id); return next; });
@@ -120,11 +123,23 @@ export function Highlights() {
       {v.audio.status === "error" || v.audio.status === "none" ? <p role="alert" className="border-l-4 border-warn bg-warn/5 p-3 text-sm">{v.audio.error ?? "No readable audio. You can add clips at the playhead."}</p> : null}
       <div className="grid grid-cols-[minmax(0,1fr)] gap-5 lg:grid-cols-[minmax(0,1fr)_300px]">
         <div className="min-w-0 space-y-5">
+          {v.settings.visual ? <Panel title="Full-session delivery scan">
+            <p className="text-sm text-slate">Checks movement through the whole recording, then combines action candidates with audio. Can include misses and leaves; movement can also produce false clips. Use a fixed camera with the bowling action in view.</p>
+            <div className="mt-3 flex flex-wrap items-center gap-3">
+              <Button tone="gold" disabled={busy != null || scanning || visualScanning} onClick={() => void v.scanVideo()}>{visualScanning ? `Scanning ${Math.round(v.deliveryScan.progress * 100)}%` : scanResult ? "Scan again" : "Find deliveries in video"}</Button>
+              {visualScanning ? <Button tone="ghost" onClick={v.cancelScan}>Cancel scan</Button> : null}
+              {scanResult ? <span className="text-sm text-slate">{coveragePercent}% decoded coverage · {v.clips.filter((c) => c.kind === "motion").length} visual-only candidates</span> : null}
+            </div>
+            {visualScanning ? <div role="status" className="mt-3 space-y-2"><Meter value={v.deliveryScan.progress} max={1} /><p className="text-xs text-slate">Keep this tab visible. This pass decodes video and takes longer than the audio scan. No files are uploaded.</p></div> : null}
+            {scanResult && coveragePercent < 95 ? <p className="mt-3 text-sm text-warn">Some intervals were not decoded densely enough. Missing video is not proof that no delivery happened; audio clips are retained in those intervals.</p> : null}
+            {v.deliveryScan.error ? <p role="alert" className="mt-3 text-sm text-warn">{v.deliveryScan.error}</p> : null}
+            {!scanResult && !visualScanning ? <p className="mt-3 text-xs text-mute">Until the video scan finishes, the list below contains audio clips only.</p> : null}
+          </Panel> : null}
           <Stage clip={selected} showAnalysis={tracking} />
           <Panel title="Save your highlights">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div><p className="font-semibold">{included.length} selected · {clock(seconds)} · one MP4</p><p className="mt-1 text-sm text-slate">Review here first. Nothing downloads until you press Save.</p></div>
-              <Button tone="gold" disabled={busy != null || scanning || !included.length || !plan.fits} onClick={build}>{busy === "export" ? `Creating ${Math.round(progress * 100)}%` : ready ? "Rebuild highlights" : "Create highlights video"}</Button>
+              <Button tone="gold" disabled={busy != null || scanning || visualScanning || !included.length || !plan.fits} onClick={build}>{busy === "export" ? `Creating ${Math.round(progress * 100)}%` : ready ? "Rebuild highlights" : "Create highlights video"}</Button>
             </div>
             <label className="mt-4 block text-sm"><span className="label">Export quality</span>
               <select className="field" value={quality} disabled={busy != null} onChange={(e) => setQuality(e.target.value as ExportQuality)}>
@@ -143,20 +158,22 @@ export function Highlights() {
             <ol className="divide-y divide-line">
               {v.clips.map((c, i) => <li key={c.id} className={`flex flex-wrap items-center gap-3 py-3 ${c.id === v.selectedId ? "bg-gold/10" : ""} ${skip.has(c.id) ? "opacity-60" : ""}`}>
                 <input type="checkbox" className="accent-[#00175f]" disabled={busy != null} checked={!skip.has(c.id)} onChange={() => toggle(c.id)} aria-label={`Include clip ${i + 1}`} />
-                <button className="min-w-0 flex-1 text-left" onClick={() => play(c)}><span className="block font-semibold text-navy">Clip {String(i + 1).padStart(2, "0")}</span><span className="text-xs tabular-nums text-slate">{clock(c.start)} · {(c.end - c.start).toFixed(1)}s{skip.has(c.id) ? " · excluded" : ""}</span></button>
-                <div className="flex flex-wrap gap-1"><Button size="sm" tone="ghost" onClick={() => play(c)}>Play</Button>{tracking ? <Button size="sm" tone="ghost" onClick={() => { v.select(c.id); router.push("/tracking"); }}>{v.analyses[c.id]?.status === "done" ? "View track" : "Track"}</Button> : null}<Button size="sm" tone="ghost" disabled={busy != null || scanning} onClick={() => single(c, i)}>Export clip</Button><Button size="sm" tone="ghost" disabled={busy != null || skip.has(c.id)} onClick={() => { setSkip((s) => new Set(s).add(c.id)); setUndo(c.id); }}>Not a shot</Button></div>
+                <button className="min-w-0 flex-1 text-left" onClick={() => play(c)}><span className="block font-semibold text-navy">Clip {String(i + 1).padStart(2, "0")}</span><span className="text-xs tabular-nums text-slate">{clock(c.start)} · {(c.end - c.start).toFixed(1)}s · {c.kind === "motion" ? "Visual candidate — verify" : c.kind === "bat" ? "Audio contact" : "Added manually"}{skip.has(c.id) ? " · excluded" : ""}</span></button>
+                <div className="flex flex-wrap gap-1"><Button size="sm" tone="ghost" onClick={() => play(c)}>Play</Button>{tracking ? <Button size="sm" tone="ghost" onClick={() => { v.select(c.id); router.push("/tracking"); }}>{v.analyses[c.id]?.status === "done" ? "View track" : "Track"}</Button> : null}<Button size="sm" tone="ghost" disabled={busy != null || scanning || visualScanning} onClick={() => single(c, i)}>Export clip</Button><Button size="sm" tone="ghost" disabled={busy != null || skip.has(c.id)} onClick={() => { setSkip((s) => new Set(s).add(c.id)); setUndo(c.id); }}>Not a shot</Button></div>
               </li>)}
             </ol>
           </Panel>
         </div>
         <aside className="min-w-0 space-y-5">
           <Panel title="Detection">
+            <label className="mb-4 block"><span className="label">Detection mode</span><select className="field" value={v.settings.visual ? "full" : "audio"} disabled={busy != null || visualScanning} onChange={(e) => v.setSettings({ ...v.settings, visual: e.target.value === "full" })}><option value="audio">Bat contacts — fastest</option><option value="full">Full session — audio + video</option></select></label>
+            {v.settings.visual ? <label className="mb-4 block"><span className="label">Visual sensitivity</span><select className="field" value={String(v.settings.motionSensitivity)} disabled={busy != null} onChange={(e) => v.setSettings({ ...v.settings, motionSensitivity: Number(e.target.value) })}><option value="0.008">More candidates</option><option value="0.012">Balanced — higher recall</option><option value="0.04">Strong actions only</option></select><span className="mt-1 block text-xs text-mute">Updates cached results without scanning again. Review visual-only clips before exporting.</span></label> : null}
             <p className="text-sm text-slate">Start with Balanced. Settings update the results without rescanning your video.</p>
             <label className="mt-3 block"><span className="label">Find shots</span><select className="field" disabled={busy != null} value={String(v.settings.threshold)} onChange={(e) => v.setSettings({ ...v.settings, threshold: Number(e.target.value) })}><option value="-25">Balanced</option><option value="-35">Softer shots — more noise</option><option value="-10">Big hits only</option>{![-25, -35, -10].includes(v.settings.threshold) ? <option value={v.settings.threshold}>Custom</option> : null}</select></label>
             <label className="mt-4 flex items-start gap-2 text-sm"><input type="checkbox" className="mt-1" disabled={busy != null} checked={v.settings.noisy} onChange={(e) => v.setSettings({ ...v.settings, noisy: e.target.checked })} /><span><b>Noisy hall</b><span className="block text-xs text-mute">Rejects weaker, less sudden sounds. Fewer false clips, but can miss soft shots.</span></span></label>
             <details className="mt-4 border-t border-line pt-3"><summary className="cursor-pointer text-sm font-semibold text-navy">Fine-tune detection</summary><div className={busy ? "pointer-events-none opacity-50" : ""}><Slider label="Sensitivity" value={v.settings.threshold} min={-40} max={-5} step={1} unit=" dB" onChange={(threshold) => v.setSettings({ ...v.settings, threshold })} /><Slider label="Minimum gap" value={v.settings.gap} min={1} max={10} step={0.5} unit=" s" onChange={(gap) => v.setSettings({ ...v.settings, gap })} /><Slider label="Before contact" value={v.settings.leadIn} min={0.5} max={4} step={0.1} unit=" s" onChange={(leadIn) => v.setSettings({ ...v.settings, leadIn })} /><Slider label="Clip duration" value={v.settings.length} min={1} max={15} step={0.5} unit=" s" onChange={(length) => v.setSettings({ ...v.settings, length })} /></div></details>
           </Panel>
-          {tracking ? <Panel title="Optional ball analysis"><p className="text-sm text-slate">Analyze selected clips after the audio scan. This is experimental; a path is not a verified speed measurement.</p><div className="mt-3 flex flex-wrap gap-2"><Button size="sm" disabled={!!trackProgress || busy != null || scanning || !included.length} onClick={trackSelected}>{trackProgress ?? "Analyze selected clips"}</Button>{trackProgress ? <Button size="sm" tone="ghost" onClick={() => { trackingCanceled.current = true; }}>Stop after this clip</Button> : null}</div></Panel> : null}
+          {tracking ? <Panel title="Optional ball analysis"><p className="text-sm text-slate">Analyze selected clips after the audio scan. This is experimental; a path is not a verified speed measurement.</p><div className="mt-3 flex flex-wrap gap-2"><Button size="sm" disabled={!!trackProgress || busy != null || scanning || visualScanning || !included.length} onClick={trackSelected}>{trackProgress ?? "Analyze selected clips"}</Button>{trackProgress ? <Button size="sm" tone="ghost" onClick={() => { trackingCanceled.current = true; }}>Stop after this clip</Button> : null}</div></Panel> : null}
           <Panel title="Private by design"><p className="text-sm text-slate">Your recording stays on this device. Review and playback need no downloads. Export only when you are happy with your selection.</p><p className="mt-3 text-xs text-mute">The video engine downloads on first use and is cached when browser storage permits. Closing this tab discards the session.</p></Panel>
         </aside>
       </div>

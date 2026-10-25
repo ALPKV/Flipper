@@ -2,6 +2,7 @@
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import type { BallAnalysis } from "@/lib/tracking/analyze";
+import { actionPeaks, fuseDeliveries, type ScanResult } from "@/lib/tracking/visual-deliveries";
 import { clipWindows, deliveryId } from "@/lib/tracking/deliveries";
 import { pickShots, selectSounds, type Sound } from "@/lib/tracking/hits";
 import { DEFAULT_SETUP, lengthM, lineCm, speedKmh, type Setup } from "@/lib/tracking/metrics";
@@ -18,6 +19,8 @@ export type ClipSettings = {
   /** How loud a sound must be to make a clip, in dB below the session's big hits (0 = only the loudest). */
   threshold: number;
   noisy: boolean;
+  visual: boolean;
+  motionSensitivity: number;
   /** After a clip, sounds within this many seconds are skipped (back-to-back noise from the same ball). */
   gap: number;
   leadIn: number;
@@ -32,7 +35,7 @@ export type Clip = {
   contact: number | null;
   /** Sound strength against the session's big hits, in dB. */
   level: number | null;
-  kind: "bat" | "manual";
+  kind: "bat" | "motion" | "manual";
   manual: boolean;
 };
 
@@ -49,6 +52,9 @@ export type AnalysisState = {
 export type TrackingSetup = Setup & { stumps: { leftX: number; rightX: number } | null };
 
 type AudioState = { status: "idle" | "loading" | "ready" | "error" | "none"; progress: number; error: string | null };
+type DeliveryScan = { status: "idle" | "running" | "done" | "error"; progress: number; result: ScanResult | null; error: string | null };
+const EMPTY_SCAN: DeliveryScan = { status: "idle", progress: 0, result: null, error: null };
+
 type Ctx = {
   file: File | null;
   url: string | null;
@@ -56,6 +62,9 @@ type Ctx = {
   loadFile: (f: File) => void;
   clearFile: () => void;
   audio: AudioState;
+  deliveryScan: DeliveryScan;
+  scanVideo: () => Promise<void>;
+  cancelScan: () => void;
   settings: ClipSettings;
   setSettings: (s: ClipSettings) => void;
   clips: Clip[];
@@ -87,7 +96,7 @@ export function useVideo(): Ctx {
   return v;
 }
 
-const DEFAULT_SETTINGS: ClipSettings = { threshold: -25, noisy: false, gap: 3, leadIn: 1, length: 2.5 };
+const DEFAULT_SETTINGS: ClipSettings = { threshold: -25, noisy: false, visual: false, motionSensitivity: .012, gap: 3, leadIn: 1, length: 2.5 };
 const DEFAULT_TRACKING: TrackingSetup = { ...DEFAULT_SETUP, stumps: null };
 
 const emptyMarks = (): Marks => ({
@@ -122,9 +131,11 @@ export function VideoProvider({ children }: { children: React.ReactNode }) {
   const playerRef = useRef<HTMLVideoElement | null>(null);
   const loadToken = useRef(0);
   const scanner = useRef<Worker | null>(null);
+  const scanController = useRef<AbortController | null>(null);
+  const [deliveryScan, setDeliveryScan] = useState<DeliveryScan>(EMPTY_SCAN);
 
   useEffect(() => setSetupState(loadSetup()), []);
-  useEffect(() => () => { scanner.current?.terminate(); releaseEngine(); }, []);
+  useEffect(() => () => { scanner.current?.terminate(); scanController.current?.abort(); releaseEngine(); }, []);
 
   const setSetup = useCallback((s: TrackingSetup) => {
     setSetupState(s);
@@ -137,6 +148,9 @@ export function VideoProvider({ children }: { children: React.ReactNode }) {
     loadToken.current++;
     scanner.current?.terminate();
     scanner.current = null;
+    scanController.current?.abort();
+    scanController.current = null;
+    setDeliveryScan(EMPTY_SCAN);
     setFile(null);
     setUrl((old) => {
       if (old) URL.revokeObjectURL(old);
@@ -206,10 +220,33 @@ export function VideoProvider({ children }: { children: React.ReactNode }) {
     [clearFile],
   );
 
-  const deliveries = useMemo(
-    () => (sounds ? pickShots(selectSounds(sounds, settings.noisy), settings.threshold, settings.gap) : []),
-    [sounds, settings.threshold, settings.gap, settings.noisy],
-  );
+  const scanVideo = useCallback(async () => {
+    if (!url) return;
+    scanController.current?.abort();
+    const controller = new AbortController();
+    scanController.current = controller;
+    const token = loadToken.current;
+    setDeliveryScan((s) => ({ ...s, status: "running", progress: 0, error: null }));
+    try {
+      const { scanDeliveries } = await import("@/lib/video/delivery-scan");
+      const result = await scanDeliveries(url, controller.signal, (progress) => {
+        if (token === loadToken.current && scanController.current === controller) setDeliveryScan((s) => ({ ...s, progress }));
+      });
+      if (token !== loadToken.current || scanController.current !== controller) return;
+      setDeliveryScan({ status: "done", progress: 1, result, error: null });
+    } catch (err) {
+      if (token !== loadToken.current || scanController.current !== controller) return;
+      setDeliveryScan((s) => ({ ...s, status: "error", progress: 0,
+        error: err instanceof Error ? err.message : "Visual scan failed. Audio clips are unchanged." }));
+    }
+  }, [url]);
+  const cancelScan = useCallback(() => scanController.current?.abort(), []);
+
+  const deliveries = useMemo(() => {
+    const heard = sounds ? pickShots(selectSounds(sounds, settings.noisy), settings.threshold, settings.gap) : [];
+    if (!settings.visual || !deliveryScan.result) return heard;
+    return fuseDeliveries(heard, actionPeaks(deliveryScan.result.series, settings.motionSensitivity), deliveryScan.result.covered);
+  }, [sounds, settings, deliveryScan.result]);
 
   const clips: Clip[] = useMemo(() => {
     const duration = meta?.duration ?? Infinity;
@@ -218,9 +255,9 @@ export function VideoProvider({ children }: { children: React.ReactNode }) {
       id: deliveryId(d),
       start,
       end,
-      contact: d.t,
+      contact: d.kind === "motion" ? null : d.t,
       level: d.rel,
-      kind: "bat",
+      kind: d.kind === "motion" ? "motion" : "bat",
       manual: false,
     }));
     return [...auto, ...manual].sort((a, b) => a.start - b.start);
@@ -322,6 +359,9 @@ export function VideoProvider({ children }: { children: React.ReactNode }) {
     loadFile,
     clearFile,
     audio,
+    deliveryScan,
+    scanVideo,
+    cancelScan,
     settings,
     setSettings,
     clips,
