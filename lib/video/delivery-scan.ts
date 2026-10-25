@@ -1,6 +1,6 @@
 "use client";
 
-import { coverage, motionFraction, type ScanResult } from "../tracking/visual-deliveries";
+import { coverage, motionFraction, repairWindows, type ScanResult } from "../tracking/visual-deliveries";
 
 /** One native decode pass, two 160px buffers; no full video or frame collection in JS memory. */
 export async function scanDeliveries(src: string, signal: AbortSignal,
@@ -42,7 +42,7 @@ export async function scanDeliveries(src: string, signal: AbortSignal,
     let previous: Uint8Array | null = null;
     let last = -1;
     let gapCount = 0;
-    video.playbackRate = 3;
+    video.playbackRate = 2;
     await new Promise<void>((resolve, reject) => {
       let finished = false;
       let lastFrameAt = performance.now();
@@ -83,11 +83,11 @@ export async function scanDeliveries(src: string, signal: AbortSignal,
               series.t.push(t);
               series.m.push(motionFraction(previous, gray));
             } else if (previous) {
-              if (++gapCount >= 3) video.playbackRate = Math.max(1, video.playbackRate / 1.5);
+              if (++gapCount >= 1) video.playbackRate = 1;
             }
             previous = gray;
             last = t;
-            onProgress(Math.min(.99, t / video.duration));
+            onProgress(Math.min(.79, .8 * t / video.duration));
           } catch (error) { finish(error instanceof Error ? error : new Error("Could not read video frames.")); return; }
         }
         frame = video.requestVideoFrameCallback(sample);
@@ -96,7 +96,62 @@ export async function scanDeliveries(src: string, signal: AbortSignal,
       video.play().catch(() => finish(new Error("Playback was blocked. Turn off Low Power Mode and press Scan again.")));
       if (signal.aborted) aborted();
     });
-    const covered = coverage(sampledTimes);
+    // Playback can drop frames when the browser is busy. Repair those exact intervals by
+    // deterministic seeking, with context overlap; do not silently accept a partial scan.
+    const repairs = repairWindows(sampledTimes, video.duration);
+    const distance = repairs.reduce((n, [a, b]) => n + b - a, 0);
+    let repaired = 0;
+    for (const [a, b] of repairs) {
+      previous = null;
+      let previousTime = -1;
+      for (let t = a; t <= b + .001; t += .2) {
+        if (signal.aborted) throw new DOMException("Scan canceled", "AbortError");
+        const target = Math.min(t, video.duration - .001);
+        await new Promise<void>((resolve, reject) => {
+          const finish = (error?: Error) => {
+            clearTimeout(timeout);
+            video.removeEventListener("seeked", done);
+            video.removeEventListener("error", failed);
+            signal.removeEventListener("abort", aborted);
+            if (error) reject(error); else resolve();
+          };
+          const done = () => finish();
+          const failed = () => finish(new Error("Could not repair missing video frames."));
+          const aborted = () => finish(new DOMException("Scan canceled", "AbortError"));
+          const timeout = setTimeout(() => finish(new Error("Video seek timed out. Try a shorter H.264 MP4.")), 5000);
+          video.addEventListener("seeked", done, { once: true });
+          video.addEventListener("error", failed, { once: true });
+          signal.addEventListener("abort", aborted, { once: true });
+          if (Math.abs(video.currentTime - target) < .001 && video.readyState >= 2) done();
+          else video.currentTime = target;
+        });
+        ctx.drawImage(video, 0, 0, 160, 160);
+        const rgba = ctx.getImageData(0, 0, 160, 160).data;
+        const gray = new Uint8Array(25600);
+        for (let i = 0; i < gray.length; i++) gray[i] = (rgba[4*i] + 2*rgba[4*i+1] + rgba[4*i+2]) >> 2;
+        sampledTimes.push(target);
+        if (previous) { series.t.push(target); series.m.push(motionFraction(previous, gray)); }
+        previous = gray;
+        previousTime = target;
+        onProgress(.8 + .19 * (repaired + target - a) / Math.max(.2, distance));
+      }
+      if (previousTime < b - .25) throw new Error("Video repair did not cover the missing interval.");
+      repaired += b - a;
+    }
+    // Overlapping repairs replace their original samples, instead of creating duplicate times.
+    const ordered = series.t.map((t, i) => ({ t, m: series.m[i], i })).sort((a, b) => a.t - b.t || a.i - b.i);
+    const clean: typeof ordered = [];
+    for (const point of ordered) {
+      const prev = clean.at(-1);
+      if (prev && point.t - prev.t < .09) clean[clean.length - 1] = point;
+      else clean.push(point);
+    }
+    series.t = clean.map((p) => p.t);
+    series.m = clean.map((p) => p.m);
+    const covered = coverage([...new Set(sampledTimes)].sort((a, b) => a - b));
+    if (covered[0]?.[0] <= .25) covered[0][0] = 0;
+    const tail = covered.at(-1);
+    if (tail && video.duration - tail[1] <= .25) tail[1] = video.duration;
     if (!series.t.length) throw new Error("No usable visual samples were decoded. Audio clips are unchanged.");
     onProgress(1);
     return { series, covered, duration: video.duration };

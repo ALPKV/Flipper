@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { actionPeaks, coverage, fuseDeliveries, motionFraction } from "../lib/tracking/visual-deliveries.ts";
+import { actionPeaks, coverage, fuseDeliveries, motionFraction, repairWindows } from "../lib/tracking/visual-deliveries.ts";
 import { clipWindows, deliveryId } from "../lib/tracking/deliveries.ts";
 
 test("motion detects an action in silence without requiring a ball or bat sound", () => {
@@ -37,4 +37,19 @@ test("visual clips have distinct IDs and enough follow-through without a contact
 test("static footage and mismatched frame buffers do not register motion", () => {
   assert.equal(motionFraction(new Uint8Array(10), new Uint8Array(10)), 0);
   assert.equal(motionFraction(new Uint8Array(1), new Uint8Array(10)), 0);
+});
+
+
+test("missing-frame repair covers the beginning, internal holes, and end with context", () => {
+  assert.deepEqual(repairWindows([3, 3.2, 3.4, 7, 7.2, 7.4], 10), [[0, 10]]);
+  assert.deepEqual(repairWindows(Array.from({length: 51}, (_, i) => i * .2), 10), []);
+});
+test("an early noise with fully observed video does not survive just because pre-roll is negative", () => {
+  assert.equal(fuseDeliveries([{t: .3, rel: 0}], [], [[0, 10]]).length, 0);
+  assert.equal(fuseDeliveries([{t: .3, rel: 0}], [], [[2, 10]]).length, 1);
+});
+
+test("follow-through immediately after contact does not become a second clip", () => {
+  const events = fuseDeliveries([{t: 10.8, rel: 0}], [{t: 10, strength: .1}, {t: 12, strength: .1}], [[0, 20]]);
+  assert.equal(events.length, 1);
 });

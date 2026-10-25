@@ -17,10 +17,15 @@ type Output = { blob: Blob; url: string; name: string; signature: string };
 export function Highlights() {
   const v = useVideo();
   const router = useRouter();
+  const { scanVideo } = v;
+  useEffect(() => {
+    if (v.url && v.settings.visual && v.audio.status !== "loading" && v.deliveryScan.status === "idle") void scanVideo();
+  }, [v.url, v.settings.visual, v.audio.status, v.deliveryScan.status, scanVideo]);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [progress, setProgress] = useState(0);
   const [skip, setSkip] = useState<Set<string>>(new Set());
+  const [approved, setApproved] = useState<Set<string>>(new Set());
   const [undo, setUndo] = useState<string | null>(null);
   const [output, setOutput] = useState<Output | null>(null);
   const [quality, setQuality] = useState<ExportQuality>("auto");
@@ -42,13 +47,14 @@ export function Highlights() {
 
   const [forFile, setForFile] = useState(v.file);
   if (forFile !== v.file) {
-    setForFile(v.file); setSkip(new Set()); setOutput(null); setError(null); setBusy(null); setTrackProgress(null); setUndo(null);
+    setForFile(v.file); setSkip(new Set()); setApproved(new Set()); setOutput(null); setError(null); setBusy(null); setTrackProgress(null); setUndo(null);
   }
 
   if (!v.file) return <VideoDrop />;
   const file = v.file;
   const selected = v.clips.find((c) => c.id === v.selectedId) ?? null;
-  const included = v.clips.filter((c) => !skip.has(c.id));
+  const isIncluded = (c: Clip) => !skip.has(c.id) && (!c.reviewRequired || approved.has(c.id));
+  const included = v.clips.filter(isIncluded);
   const seconds = included.reduce((sum, c) => sum + c.end - c.start, 0);
   const duration = v.meta?.duration ?? v.clips.at(-1)?.end ?? 1;
   const base = file.name.replace(/\.[^.]+$/, "");
@@ -57,11 +63,16 @@ export function Highlights() {
   const ready = output?.signature === signature ? output : null;
   const scanning = v.audio.status === "loading";
   const visualScanning = v.deliveryScan.status === "running";
+  const awaitingVideo = v.settings.visual && !v.deliveryScan.result;
   const scanResult = v.deliveryScan.result;
   const coveragePercent = scanResult ? Math.min(100, Math.round(100 * scanResult.covered.reduce((sum, [a, b]) => sum + b - a, 0) / scanResult.duration)) : 0;
 
   function toggle(id: string) {
-    setSkip((old) => { const next = new Set(old); if (next.has(id)) next.delete(id); else next.add(id); return next; });
+    const clip = v.clips.find((c) => c.id === id);
+    if (clip && !isIncluded(clip)) {
+      setApproved((old) => new Set(old).add(id));
+      setSkip((old) => { const next = new Set(old); next.delete(id); return next; });
+    } else setSkip((old) => new Set(old).add(id));
   }
   function play(c: Clip) { v.select(c.id); v.seek(c.start, true); }
   async function run(label: string, job: () => Promise<void>) {
@@ -112,7 +123,7 @@ export function Highlights() {
     <div className="space-y-5">
       <FileBar />
       <div className="flex flex-wrap items-center justify-between gap-4 border border-line bg-white p-4">
-        <div><p className="display text-2xl font-bold text-navy">{scanning ? "Finding your shots…" : `${v.clips.length} clips to review`}</p>
+        <div><p className="display text-2xl font-bold text-navy">{scanning || visualScanning ? "Checking your deliveries…" : `${v.clips.length} clips to review`}</p>
           <p className="text-sm text-slate">Play a clip, untick any noise, then save one highlights video. No uploads.</p></div>
         <label className="flex max-w-sm items-start gap-3 text-sm">
           <input type="checkbox" role="switch" className="mt-1 accent-[#00175f]" checked={tracking} onChange={(e) => setTracking(e.target.checked)} />
@@ -130,16 +141,16 @@ export function Highlights() {
               {visualScanning ? <Button tone="ghost" onClick={v.cancelScan}>Cancel scan</Button> : null}
               {scanResult ? <span className="text-sm text-slate">{coveragePercent}% decoded coverage · {v.clips.filter((c) => c.kind === "motion").length} visual-only candidates</span> : null}
             </div>
-            {visualScanning ? <div role="status" className="mt-3 space-y-2"><Meter value={v.deliveryScan.progress} max={1} /><p className="text-xs text-slate">Keep this tab visible. This pass decodes video and takes longer than the audio scan. No files are uploaded.</p></div> : null}
+            {visualScanning ? <div role="status" className="mt-3 space-y-2"><Meter value={v.deliveryScan.progress} max={1} /><p className="text-xs text-slate">Keep this tab visible. Checking video and repairing skipped intervals. No files are uploaded.</p></div> : null}
             {scanResult && coveragePercent < 95 ? <p className="mt-3 text-sm text-warn">Some intervals were not decoded densely enough. Missing video is not proof that no delivery happened; audio clips are retained in those intervals.</p> : null}
             {v.deliveryScan.error ? <p role="alert" className="mt-3 text-sm text-warn">{v.deliveryScan.error}</p> : null}
-            {!scanResult && !visualScanning ? <p className="mt-3 text-xs text-mute">Until the video scan finishes, the list below contains audio clips only.</p> : null}
+            {!scanResult && !visualScanning ? <p className="mt-3 text-xs text-mute">Preliminary audio candidates below. Wait for the video check before exporting, or choose the faster audio-only mode.</p> : null}
           </Panel> : null}
           <Stage clip={selected} showAnalysis={tracking} />
           <Panel title="Save your highlights">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div><p className="font-semibold">{included.length} selected · {clock(seconds)} · one MP4</p><p className="mt-1 text-sm text-slate">Review here first. Nothing downloads until you press Save.</p></div>
-              <Button tone="gold" disabled={busy != null || scanning || visualScanning || !included.length || !plan.fits} onClick={build}>{busy === "export" ? `Creating ${Math.round(progress * 100)}%` : ready ? "Rebuild highlights" : "Create highlights video"}</Button>
+              <Button tone="gold" disabled={busy != null || scanning || visualScanning || awaitingVideo || !included.length || !plan.fits} onClick={build}>{busy === "export" ? `Creating ${Math.round(progress * 100)}%` : ready ? "Rebuild highlights" : "Create highlights video"}</Button>
             </div>
             <label className="mt-4 block text-sm"><span className="label">Export quality</span>
               <select className="field" value={quality} disabled={busy != null} onChange={(e) => setQuality(e.target.value as ExportQuality)}>
@@ -153,13 +164,13 @@ export function Highlights() {
             {error ? <p role="alert" className="mt-3 border-l-4 border-risk bg-risk/5 p-3 text-sm text-risk">{error}{/memory/.test(error) && quality !== "compact" ? " Try Smaller 720p or select fewer clips." : ""}</p> : null}
           </Panel>
           <Panel title="Review clips" action={<Button size="sm" tone="ghost" disabled={busy != null} onClick={() => v.select(v.addManualClip(v.playhead()).id)}>Add at playhead</Button>}>
-            <div className="mb-3 flex flex-wrap items-center gap-2 text-sm"><Button size="sm" tone="ghost" disabled={busy != null} onClick={() => setSkip(new Set())}>Select all</Button><Button size="sm" tone="ghost" disabled={busy != null} onClick={() => setSkip(new Set(v.clips.map((c) => c.id)))}>Select none</Button>{undo ? <Button size="sm" tone="ghost" disabled={busy != null} onClick={() => { setSkip((s) => { const n = new Set(s); n.delete(undo); return n; }); setUndo(null); }}>Undo exclusion</Button> : null}</div>
+            <div className="mb-3 flex flex-wrap items-center gap-2 text-sm"><Button size="sm" tone="ghost" disabled={busy != null} onClick={() => { setSkip(new Set()); setApproved(new Set(v.clips.map((c) => c.id))); }}>Select all</Button><Button size="sm" tone="ghost" disabled={busy != null} onClick={() => setSkip(new Set(v.clips.map((c) => c.id)))}>Select none</Button>{undo ? <Button size="sm" tone="ghost" disabled={busy != null} onClick={() => { setSkip((s) => { const n = new Set(s); n.delete(undo); return n; }); setUndo(null); }}>Undo exclusion</Button> : null}</div>
             {!v.clips.length && !scanning ? <Empty title="No shots found">Try the Softer shots preset, turn off Noisy hall filtering, or add a clip at the playhead. Audio detection can miss leaves and balls without bat contact.</Empty> : null}
             <ol className="divide-y divide-line">
-              {v.clips.map((c, i) => <li key={c.id} className={`flex flex-wrap items-center gap-3 py-3 ${c.id === v.selectedId ? "bg-gold/10" : ""} ${skip.has(c.id) ? "opacity-60" : ""}`}>
-                <input type="checkbox" className="accent-[#00175f]" disabled={busy != null} checked={!skip.has(c.id)} onChange={() => toggle(c.id)} aria-label={`Include clip ${i + 1}`} />
-                <button className="min-w-0 flex-1 text-left" onClick={() => play(c)}><span className="block font-semibold text-navy">Clip {String(i + 1).padStart(2, "0")}</span><span className="text-xs tabular-nums text-slate">{clock(c.start)} · {(c.end - c.start).toFixed(1)}s · {c.kind === "motion" ? "Visual candidate — verify" : c.kind === "bat" ? "Audio contact" : "Added manually"}{skip.has(c.id) ? " · excluded" : ""}</span></button>
-                <div className="flex flex-wrap gap-1"><Button size="sm" tone="ghost" onClick={() => play(c)}>Play</Button>{tracking ? <Button size="sm" tone="ghost" onClick={() => { v.select(c.id); router.push("/tracking"); }}>{v.analyses[c.id]?.status === "done" ? "View track" : "Track"}</Button> : null}<Button size="sm" tone="ghost" disabled={busy != null || scanning || visualScanning} onClick={() => single(c, i)}>Export clip</Button><Button size="sm" tone="ghost" disabled={busy != null || skip.has(c.id)} onClick={() => { setSkip((s) => new Set(s).add(c.id)); setUndo(c.id); }}>Not a shot</Button></div>
+              {v.clips.map((c, i) => <li key={c.id} className={`flex flex-wrap items-center gap-3 py-3 ${c.id === v.selectedId ? "bg-gold/10" : ""} ${!isIncluded(c) ? "opacity-60" : ""}`}>
+                <input type="checkbox" className="accent-[#00175f]" disabled={busy != null} checked={isIncluded(c)} onChange={() => toggle(c.id)} aria-label={`Include clip ${i + 1}`} />
+                <button className="min-w-0 flex-1 text-left" onClick={() => play(c)}><span className="block font-semibold text-navy">Clip {String(i + 1).padStart(2, "0")}</span><span className="text-xs tabular-nums text-slate">{clock(c.start)} · {(c.end - c.start).toFixed(1)}s · {c.kind === "motion" ? "Visual candidate — verify" : c.kind === "bat" ? (c.reviewRequired ? "Unverified sound — review to include" : "Audio + action candidate") : "Added manually"}{!isIncluded(c) ? " · excluded" : ""}</span></button>
+                <div className="flex flex-wrap gap-1"><Button size="sm" tone="ghost" onClick={() => play(c)}>Play</Button>{tracking ? <Button size="sm" tone="ghost" onClick={() => { v.select(c.id); router.push("/tracking"); }}>{v.analyses[c.id]?.status === "done" ? "View track" : "Track"}</Button> : null}<Button size="sm" tone="ghost" disabled={busy != null || scanning || visualScanning || awaitingVideo} onClick={() => single(c, i)}>Export clip</Button><Button size="sm" tone="ghost" disabled={busy != null || !isIncluded(c)} onClick={() => { setSkip((s) => new Set(s).add(c.id)); setUndo(c.id); }}>Not a shot</Button></div>
               </li>)}
             </ol>
           </Panel>

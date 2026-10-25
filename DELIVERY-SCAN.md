@@ -1,16 +1,16 @@
 # Full-session delivery candidates
 
-This adds a second, optional detection mode to Clip Farmer. It watches a recording for action-sized motion, associates those candidates with audio impacts, and adds visual-only clips when no contact is heard. This can include misses and leaves, but it does not classify every action as a true bowling delivery. Walking, camera shake, other lanes, and returns can still cause false clips.
+This adds the default detection mode to Clip Farmer. It watches a recording for action-sized motion, associates those candidates with audio impacts, and adds visual-only clips when no contact is heard. This can include misses and leaves, but it does not classify every action as a true bowling delivery. Walking, camera shake, other lanes, and returns can still cause false clips.
 
 ## Usage
 
 1. Choose your recording.
-2. Under Detection, select **Full session — audio + video**.
-3. Press **Find deliveries in video** and keep the tab visible.
+2. The full video check starts after the audio pass. Keep the tab visible.
+3. Use **Scan again** to retry, or select audio-only mode for a faster but noisier result.
 4. Review candidates, especially those labeled **Visual candidate — verify**, before exporting.
 5. Adjust Visual sensitivity using cached results, without re-decoding the session.
 
-The scanner uses the browser native decoder at an initial 3x playback rate. It samples about five 160x160 grayscale images per second, keeps only two frame buffers, and retains a compact motion timeline. It slows down when decoding repeatedly drops samples. Full 4K decode still costs time; downsampling the canvas does not eliminate source decoding.
+The scanner uses the browser native decoder at an initial 2x playback rate. It samples about five 160x160 grayscale images per second, keeps only two frame buffers, and retains a compact motion timeline. It slows down when decoding repeatedly drops samples. Full 4K decode still costs time; downsampling the canvas does not eliminate source decoding.
 
 Coverage is reported. Missing decoded intervals do not count as evidence of no bowling action. The scan can be canceled, and decoder stalls fail with an actionable message instead of waiting indefinitely. No videos are uploaded.
 
@@ -43,3 +43,11 @@ Repeat for netsB and chatterW. The evaluator reuses the existing broad release m
 These development recordings give 49/50 matched deliveries, with five false candidates and three duplicates. This is not a claim of 98% real-world accuracy.
 
 User review identified audio-only clip starts 0.0, 8.6, and 13.1 seconds in chatterW as false on October 24. These corrections are retained separately in labels.json. Broad release matching alone is insufficient to validate individual clips. The current heuristic still needs review; whole-frame movement is not a bowling-action classifier.
+
+## Reliability update
+
+The native playback pass now slows immediately on dropped samples, then seeks through missing intervals with 2.2 seconds of overlap. Frame coverage is computed from observed timestamps. No new video files or model downloads are required.
+
+Unmatched audio in missing or boundary intervals is labeled **Unverified sound — review to include** and excluded from the default export selection. It remains visible and can be explicitly included; missing frames cannot prove a sound was a real delivery. Visual motion within 1.5 seconds after a matched contact is suppressed as likely follow-through, with the tradeoff that exceptionally rapid successive deliveries could require review.
+
+The evaluator now separately reports suggested exports and candidates needing review, and fails if a user-confirmed false clip returns to automatic selection. It does not hardcode those timestamps into the detector.

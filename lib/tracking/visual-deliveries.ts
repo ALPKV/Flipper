@@ -74,9 +74,32 @@ export function fuseDeliveries(audio: { t: number; rel: number }[], peaks: Motio
   }
   // Preserve sound candidates in unseen intervals instead of treating missing frames as no bowler.
   audio.forEach((a, i) => {
-    if (!used.has(i) && !covered.some(([start, end]) => start <= a.t - 2.6 && end >= a.t + .2)) {
+    if (!used.has(i) && !covered.some(([start, end]) => start <= Math.max(0, a.t - 2.6) && end >= a.t + .2)) {
       out.push({ ...a, kind: "bat" });
     }
   });
-  return out.sort((a, b) => a.t - b.t);
+  // A second movement immediately after a matched contact is usually follow-through,
+  // not a second delivery. Keep the dead time shorter than the audio detector's 3s gap.
+  return out.filter((d) => d.kind !== "motion" || !out.some((other) =>
+    other.kind === "bat" && other.actionTime != null && d.t >= other.t && d.t - other.t < 1.5
+  )).sort((a, b) => a.t - b.t);
+}
+
+/** Decode only holes, with overlap for the action detector's two-second context. */
+export function repairWindows(times: number[], duration: number): [number, number][] {
+  const spans = coverage([...times].sort((a, b) => a - b));
+  const holes: [number, number][] = [];
+  let last = 0;
+  for (const [a, b] of spans) {
+    if (a - last > .25) holes.push([Math.max(0, last - 2.2), Math.min(duration, a + 2.2)]);
+    last = Math.max(last, b);
+  }
+  if (duration - last > .25) holes.push([Math.max(0, last - 2.2), duration]);
+  const merged: [number, number][] = [];
+  for (const [a, b] of holes) {
+    const prev = merged.at(-1);
+    if (prev && a <= prev[1]) prev[1] = Math.max(prev[1], b);
+    else merged.push([a, b]);
+  }
+  return merged;
 }

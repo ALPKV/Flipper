@@ -37,6 +37,7 @@ export type Clip = {
   level: number | null;
   kind: "bat" | "motion" | "manual";
   manual: boolean;
+  reviewRequired?: boolean;
 };
 
 export type MarkKey = "release" | "bounce" | "contact";
@@ -96,7 +97,7 @@ export function useVideo(): Ctx {
   return v;
 }
 
-const DEFAULT_SETTINGS: ClipSettings = { threshold: -25, noisy: false, visual: false, motionSensitivity: .012, gap: 3, leadIn: 1, length: 2.5 };
+const DEFAULT_SETTINGS: ClipSettings = { threshold: -25, noisy: false, visual: true, motionSensitivity: .012, gap: 3, leadIn: 1, length: 2.5 };
 const DEFAULT_TRACKING: TrackingSetup = { ...DEFAULT_SETUP, stumps: null };
 
 const emptyMarks = (): Marks => ({
@@ -253,6 +254,7 @@ export function VideoProvider({ children }: { children: React.ReactNode }) {
     const kept = deliveries.filter((d) => !removed.has(deliveryId(d)));
     const auto: Clip[] = clipWindows(kept, settings.leadIn, settings.length, duration).map(({ delivery: d, start, end }) => ({
       id: deliveryId(d),
+      reviewRequired: settings.visual && d.kind !== "motion" && d.actionTime == null,
       start,
       end,
       contact: d.kind === "motion" ? null : d.t,
@@ -261,7 +263,7 @@ export function VideoProvider({ children }: { children: React.ReactNode }) {
       manual: false,
     }));
     return [...auto, ...manual].sort((a, b) => a.start - b.start);
-  }, [deliveries, manual, removed, settings.leadIn, settings.length, meta]);
+  }, [deliveries, manual, removed, settings.leadIn, settings.length, settings.visual, meta]);
 
   const addManualClip = useCallback(
     (time: number) => {
