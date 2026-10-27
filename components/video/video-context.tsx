@@ -97,7 +97,7 @@ export function useVideo(): Ctx {
   return v;
 }
 
-const DEFAULT_SETTINGS: ClipSettings = { threshold: -25, noisy: false, visual: true, motionSensitivity: .012, gap: 3, leadIn: 1, length: 2.5 };
+const DEFAULT_SETTINGS: ClipSettings = { threshold: -25, noisy: false, visual: true, motionSensitivity: .012, gap: 3, leadIn: 1.5, length: 5 };
 const DEFAULT_TRACKING: TrackingSetup = { ...DEFAULT_SETUP, stumps: null };
 
 const emptyMarks = (): Marks => ({
@@ -132,11 +132,12 @@ export function VideoProvider({ children }: { children: React.ReactNode }) {
   const playerRef = useRef<HTMLVideoElement | null>(null);
   const loadToken = useRef(0);
   const scanner = useRef<Worker | null>(null);
+  const audioAbort = useRef<AbortController | null>(null);
   const scanController = useRef<AbortController | null>(null);
   const [deliveryScan, setDeliveryScan] = useState<DeliveryScan>(EMPTY_SCAN);
 
   useEffect(() => setSetupState(loadSetup()), []);
-  useEffect(() => () => { scanner.current?.terminate(); scanController.current?.abort(); releaseEngine(); }, []);
+  useEffect(() => () => { scanner.current?.terminate(); audioAbort.current?.abort(); scanController.current?.abort(); releaseEngine(); }, []);
 
   const setSetup = useCallback((s: TrackingSetup) => {
     setSetupState(s);
@@ -148,6 +149,7 @@ export function VideoProvider({ children }: { children: React.ReactNode }) {
   const clearFile = useCallback(() => {
     loadToken.current++;
     scanner.current?.terminate();
+    audioAbort.current?.abort();
     scanner.current = null;
     scanController.current?.abort();
     scanController.current = null;
@@ -189,7 +191,17 @@ export function VideoProvider({ children }: { children: React.ReactNode }) {
       const progress = (p: number) => token === loadToken.current && setAudio((a) => ({ ...a, progress: p }));
       // Reading the sound is the first 60%, listening for impacts the rest. Only the list of
       // deliveries is kept; the audio itself is dropped as soon as it has been analysed.
-      extractAudio(f, (p) => progress(p * 0.6))
+      const audioController = new AbortController();
+      audioAbort.current = audioController;
+      import("@/lib/video/native-decode").then(async ({ nativeAudio }) => {
+        try {
+          const res = await nativeAudio(f, audioController.signal, (p) => progress(p * .6));
+          return { ...res, fps: null as number | null };
+        } catch (err) {
+          if (audioController.signal.aborted) throw err;
+          return extractAudio(f, (p) => progress(p * .6));
+        }
+      })
         .then(async (res) => {
           if (token !== loadToken.current) return;
           const impacts = await new Promise<Sound[]>((resolve, reject) => {
@@ -222,16 +234,23 @@ export function VideoProvider({ children }: { children: React.ReactNode }) {
   );
 
   const scanVideo = useCallback(async () => {
-    if (!url) return;
+    if (!url || !file) return;
     scanController.current?.abort();
     const controller = new AbortController();
     scanController.current = controller;
     const token = loadToken.current;
     setDeliveryScan((s) => ({ ...s, status: "running", progress: 0, error: null }));
     try {
-      const { scanDeliveries } = await import("@/lib/video/delivery-scan");
-      const result = await scanDeliveries(url, controller.signal, (progress) => {
-        if (token === loadToken.current && scanController.current === controller) setDeliveryScan((s) => ({ ...s, progress }));
+      const { scanFileMotion } = await import("@/lib/video/native-decode");
+      const result = await scanFileMotion(file, controller.signal, (progress) => {
+        if (token === loadToken.current && scanController.current === controller) setDeliveryScan((s) => ({ ...s, progress: progress * .35 }));
+      });
+      if (token !== loadToken.current || scanController.current !== controller) return;
+      const heard = sounds ? pickShots(selectSounds(sounds, settings.noisy), settings.threshold, settings.gap) : [];
+      const contacts = heard.map(d=>d.t);
+      const { verifyShots } = await import("@/lib/video/verify-shots");
+      result.verifiedContacts = await verifyShots(file, contacts, result.duration, controller.signal, progress => {
+        if (token === loadToken.current && scanController.current === controller) setDeliveryScan(s=>({...s, progress: .35 + .65*progress}));
       });
       if (token !== loadToken.current || scanController.current !== controller) return;
       setDeliveryScan({ status: "done", progress: 1, result, error: null });
@@ -240,13 +259,17 @@ export function VideoProvider({ children }: { children: React.ReactNode }) {
       setDeliveryScan((s) => ({ ...s, status: "error", progress: 0,
         error: err instanceof Error ? err.message : "Visual scan failed. Audio clips are unchanged." }));
     }
-  }, [url]);
+  }, [url, file, sounds, settings]);
   const cancelScan = useCallback(() => scanController.current?.abort(), []);
 
   const deliveries = useMemo(() => {
     const heard = sounds ? pickShots(selectSounds(sounds, settings.noisy), settings.threshold, settings.gap) : [];
     if (!settings.visual || !deliveryScan.result) return heard;
-    return fuseDeliveries(heard, actionPeaks(deliveryScan.result.series, settings.motionSensitivity), deliveryScan.result.covered);
+    const fused = fuseDeliveries(heard, actionPeaks(deliveryScan.result.series, settings.motionSensitivity), deliveryScan.result.covered);
+    // A verified ball flight can rescue an audio contact missed by coarse whole-frame motion.
+    for (const contact of heard) if (deliveryScan.result.verifiedContacts?.some(t=>Math.abs(t-contact.t)<.01)
+      && !fused.some(d=>Math.abs(d.t-contact.t)<.01)) fused.push({...contact,kind:"bat"});
+    return fused.sort((a,b)=>a.t-b.t);
   }, [sounds, settings, deliveryScan.result]);
 
   const clips: Clip[] = useMemo(() => {
@@ -254,7 +277,7 @@ export function VideoProvider({ children }: { children: React.ReactNode }) {
     const kept = deliveries.filter((d) => !removed.has(deliveryId(d)));
     const auto: Clip[] = clipWindows(kept, settings.leadIn, settings.length, duration).map(({ delivery: d, start, end }) => ({
       id: deliveryId(d),
-      reviewRequired: settings.visual && d.kind !== "motion" && d.actionTime == null,
+      reviewRequired: !deliveryScan.result?.verifiedContacts?.some(t=>Math.abs(t-d.t)<.01),
       start,
       end,
       contact: d.kind === "motion" ? null : d.t,
@@ -263,7 +286,7 @@ export function VideoProvider({ children }: { children: React.ReactNode }) {
       manual: false,
     }));
     return [...auto, ...manual].sort((a, b) => a.start - b.start);
-  }, [deliveries, manual, removed, settings.leadIn, settings.length, settings.visual, meta]);
+  }, [deliveries, manual, removed, settings.leadIn, settings.length, deliveryScan.result, meta]);
 
   const addManualClip = useCallback(
     (time: number) => {

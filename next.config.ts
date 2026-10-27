@@ -8,6 +8,7 @@ const securityHeaders = [
 ];
 
 const nextConfig: NextConfig = {
+  distDir: process.env.FLIPPER_BUILD_DIR ?? ".next",
   // Old addresses from when Flipper had accounts and more tabs.
   async redirects() {
     return ["/clips", "/login", "/signup", "/dashboard", "/profile"].map((source) => ({

@@ -146,3 +146,5 @@ public/vendor/
 
 .tools/
 .scratch/
+
+.next-*/

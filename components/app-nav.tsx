@@ -6,7 +6,7 @@ import { Brand } from "./brand";
 
 const NAV = [
   { href: "/highlights", label: "Clip Farmer" },
-  { href: "/tracking", label: "Ball Tracking" },
+  { href: "/tracking", label: "Speed Check" },
 ];
 
 export function AppNav() {

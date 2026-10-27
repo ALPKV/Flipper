@@ -8,8 +8,7 @@ export default function ClipsPage() {
   return (
     <>
       <PageHeader eyebrow="Flipper video lab" title="Clip Farmer">
-        Your nets session, without the waiting between shots. Choose a recording, review the clips,
-        and save one highlights video. Ball analysis is optional.
+        Keep the genuine shots and remove the waiting. Output length follows your session, with no artificial time limit.
       </PageHeader>
       <Container>
         <Highlights />
