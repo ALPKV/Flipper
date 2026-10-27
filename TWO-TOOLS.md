@@ -38,3 +38,5 @@ Unit checks cover speed arithmetic, acoustic correction, input tolerances and in
 - The 2m18s noisy WhatsApp session decoded with 100% coverage. Strict mode selected just one candidate near 70s from 13 combined candidates. The existing annotations list ten real deliveries, so recall is currently poor; this is **not** a finished automatic clipping detector. The three user-rejected early clips were not auto-selected.
 - Automatic speed failed safely on the first indoor delivery. Frame stepping reached actual PTS values 1.433343 and 1.833343 seconds, and manual timing produced the expected distance/time calculation. These were functional test marks, not radar-validated release/contact ground truth.
 - Unit tests (26) and the production build pass. No 30-minute source session or radar-ground-truth test was available in this verification run.
+
+Exact 720p cuts are the default for the strict clipper. The first export check showed that stream-copy cuts included about half a second of keyframe lead-in; strict mode therefore re-encodes cut boundaries instead of preserving that extra footage. This costs export time.

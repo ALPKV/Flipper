@@ -61,7 +61,7 @@ export function Highlights() {
   const selectedIds = new Set(selected.map(c=>c.id));
   const seconds = selected.reduce((n,c)=>n+c.end-c.start,0);
   const duration = v.meta?.duration ?? 1;
-  const plan = planExport(file.size, duration, seconds, selected.length, "auto", touch);
+  const plan = planExport(file.size, duration, seconds, selected.length, "compact", touch);
   const signature = selected.map(c=>`${c.id}:${c.start}:${c.end}`).join("|");
   const ready = output?.signature === signature ? output : null;
   const rows = showAll ? v.clips : v.clips.filter(c=>selectedIds.has(c.id));
