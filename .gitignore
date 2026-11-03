@@ -148,3 +148,5 @@ public/vendor/
 .scratch/
 
 .next-*/
+
+.pose-tools/

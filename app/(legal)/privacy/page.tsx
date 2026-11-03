@@ -7,7 +7,7 @@ export const metadata: Metadata = { title: "Privacy Policy" };
 export default function PrivacyPage() {
   return (
     <article>
-      <LegalTitle title="Privacy Policy" updated="23 October 2026">
+      <LegalTitle title="Privacy Policy" updated="3 November 2026">
         Flipper is a free, non-commercial app that turns a net session video into clips and tracks the ball. The
         short version: there are no accounts, and your videos never leave your device.
       </LegalTitle>
@@ -20,7 +20,7 @@ export default function PrivacyPage() {
         <ul>
           <li>Clips and highlights videos are made on your device and saved only where you save them.</li>
           <li>
-            The video and everything made from it are held in the open tab&apos;s memory only, and are wiped when you
+            The video, body-landmark snapshots and generated clips are held in the open tab&apos;s memory only, and are wiped when you
             press <b>Change video</b> or close or reload the tab.
           </li>
           <li>Tracked speeds and lengths are shown for the session only and are not stored anywhere.</li>
@@ -30,7 +30,7 @@ export default function PrivacyPage() {
       <Section title="What Flipper keeps">
         <p>
           Nothing about you on a server: there are no accounts, no database and no sign-in. Your browser keeps your
-          Ball Tracking camera setup locally. It may also cache the video-processing engine to avoid downloading it
+          camera setup locally, along with your “Not a delivery” corrections for a recording. These corrections contain a local recording identifier and timestamps, not video frames. Clear this site’s browser storage to remove them. The pose model and its runtime are served by this website and processed locally. It may also cache the video-processing engine to avoid downloading it
           again. Recordings are not put in that cache. There are no advertising, analytics or tracking cookies.
         </p>
       </Section>

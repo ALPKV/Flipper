@@ -1,7 +1,8 @@
+import type { PoseAction } from "./pose-actions.ts";
 /** Lightweight action candidates from a fixed camera. Motion is evidence, not proof of a delivery. */
 export type MotionSeries = { t: number[]; m: number[] };
 export type MotionPeak = { t: number; strength: number };
-export type ScanResult = { series: MotionSeries; covered: [number, number][]; duration: number; verifiedContacts?: number[] };
+export type ScanResult = { series: MotionSeries; covered: [number, number][]; duration: number; verifiedContacts?: number[]; poseActions?: PoseAction[]; poseStats?: { decoded: number; withPose: number } };
 
 export function motionFraction(a: Uint8Array, b: Uint8Array): number {
   if (!a.length || a.length !== b.length) return 0;

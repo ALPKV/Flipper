@@ -2,8 +2,10 @@
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import type { BallAnalysis } from "@/lib/tracking/analyze";
-import { actionPeaks, fuseDeliveries, type ScanResult } from "@/lib/tracking/visual-deliveries";
-import { clipWindows, deliveryId } from "@/lib/tracking/deliveries";
+import { coverage, type ScanResult } from "@/lib/tracking/visual-deliveries";
+import { categorizeDeliveries, type DeliveryCategory } from "@/lib/tracking/pose-actions";
+import { NORMAL_TIMING, timingFactor, type VideoTiming } from "@/lib/tracking/video-timing";
+import { clipWindows, deliveryId, type Delivery } from "@/lib/tracking/deliveries";
 import { pickShots, selectSounds, type Sound } from "@/lib/tracking/hits";
 import { DEFAULT_SETUP, lengthM, lineCm, speedKmh, type Setup } from "@/lib/tracking/metrics";
 import { extractAudio, releaseEngine } from "@/lib/video/ffmpeg";
@@ -18,6 +20,7 @@ import { captureFrames } from "@/lib/video/frames";
 export type ClipSettings = {
   /** How loud a sound must be to make a clip, in dB below the session's big hits (0 = only the loudest). */
   threshold: number;
+  timing: VideoTiming;
   noisy: boolean;
   visual: boolean;
   motionSensitivity: number;
@@ -38,6 +41,8 @@ export type Clip = {
   kind: "bat" | "motion" | "manual";
   manual: boolean;
   reviewRequired?: boolean;
+  category?: DeliveryCategory;
+  poseConfidence?: number;
 };
 
 export type MarkKey = "release" | "bounce" | "contact";
@@ -53,7 +58,7 @@ export type AnalysisState = {
 export type TrackingSetup = Setup & { stumps: { leftX: number; rightX: number } | null };
 
 type AudioState = { status: "idle" | "loading" | "ready" | "error" | "none"; progress: number; error: string | null };
-type DeliveryScan = { status: "idle" | "running" | "done" | "error"; progress: number; result: ScanResult | null; error: string | null };
+type DeliveryScan = { status: "idle" | "running" | "done" | "error"; progress: number; result: ScanResult | null; error: string | null; phase?: string };
 const EMPTY_SCAN: DeliveryScan = { status: "idle", progress: 0, result: null, error: null };
 
 type Ctx = {
@@ -97,7 +102,7 @@ export function useVideo(): Ctx {
   return v;
 }
 
-const DEFAULT_SETTINGS: ClipSettings = { threshold: -25, noisy: false, visual: true, motionSensitivity: .012, gap: 3, leadIn: 1.5, length: 5 };
+const DEFAULT_SETTINGS: ClipSettings = { timing: NORMAL_TIMING, threshold: -25, noisy: false, visual: true, motionSensitivity: .012, gap: 3, leadIn: 1.5, length: 5 };
 const DEFAULT_TRACKING: TrackingSetup = { ...DEFAULT_SETUP, stumps: null };
 
 const emptyMarks = (): Marks => ({
@@ -121,7 +126,7 @@ export function VideoProvider({ children }: { children: React.ReactNode }) {
   const [audio, setAudio] = useState<AudioState>({ status: "idle", progress: 0, error: null });
   const [sounds, setSounds] = useState<Sound[] | null>(null);
   const [fps, setFps] = useState<number | null>(null);
-  const [settings, setSettings] = useState<ClipSettings>(DEFAULT_SETTINGS);
+  const [settings, setSettingsState] = useState<ClipSettings>(DEFAULT_SETTINGS);
   const [manual, setManual] = useState<Clip[]>([]);
   const [removed, setRemoved] = useState<Set<string>>(new Set());
   const [selectedId, select] = useState<string | null>(null);
@@ -241,43 +246,51 @@ export function VideoProvider({ children }: { children: React.ReactNode }) {
     const token = loadToken.current;
     setDeliveryScan((s) => ({ ...s, status: "running", progress: 0, error: null }));
     try {
-      const { scanFileMotion } = await import("@/lib/video/native-decode");
-      const result = await scanFileMotion(file, controller.signal, (progress) => {
-        if (token === loadToken.current && scanController.current === controller) setDeliveryScan((s) => ({ ...s, progress: progress * .35 }));
-      });
-      if (token !== loadToken.current || scanController.current !== controller) return;
-      const heard = sounds ? pickShots(selectSounds(sounds, settings.noisy), settings.threshold, settings.gap) : [];
-      const contacts = heard.map(d=>d.t);
-      const { verifyShots } = await import("@/lib/video/verify-shots");
-      result.verifiedContacts = await verifyShots(file, contacts, result.duration, controller.signal, progress => {
-        if (token === loadToken.current && scanController.current === controller) setDeliveryScan(s=>({...s, progress: .35 + .65*progress}));
-      });
-      if (token !== loadToken.current || scanController.current !== controller) return;
+      const factor=timingFactor(settings.timing);
+      if (factor==null) throw new Error("Choose known playback settings before pose analysis.");
+      const { scanPoses } = await import("@/lib/video/pose-scan");
+      const poses=await scanPoses(file,controller.signal,(progress,phase)=>{
+        if(token===loadToken.current && scanController.current===controller) setDeliveryScan(s=>({...s,progress,phase}));
+      },factor,12);
+      if(token!==loadToken.current || scanController.current!==controller)return;
+      const observed=coverage(poses.observed,.5*factor);
+      if(observed[0] && observed[0][0]<.25*factor)observed[0][0]=0;
+      const tail=observed.at(-1);
+      if(tail && poses.duration-tail[1]<.25*factor)tail[1]=poses.duration;
+      const result:ScanResult={series:{t:[],m:[]},duration:poses.duration,covered:observed,
+        poseActions:poses.events,poseStats:{decoded:poses.decoded,withPose:poses.withPose}};
       setDeliveryScan({ status: "done", progress: 1, result, error: null });
     } catch (err) {
       if (token !== loadToken.current || scanController.current !== controller) return;
       setDeliveryScan((s) => ({ ...s, status: "error", progress: 0,
         error: err instanceof Error ? err.message : "Visual scan failed. Audio clips are unchanged." }));
     }
-  }, [url, file, sounds, settings]);
+  }, [url, file, settings.timing]);
   const cancelScan = useCallback(() => scanController.current?.abort(), []);
 
-  const deliveries = useMemo(() => {
-    const heard = sounds ? pickShots(selectSounds(sounds, settings.noisy), settings.threshold, settings.gap) : [];
-    if (!settings.visual || !deliveryScan.result) return heard;
-    const fused = fuseDeliveries(heard, actionPeaks(deliveryScan.result.series, settings.motionSensitivity), deliveryScan.result.covered);
-    // A verified ball flight can rescue an audio contact missed by coarse whole-frame motion.
-    for (const contact of heard) if (deliveryScan.result.verifiedContacts?.some(t=>Math.abs(t-contact.t)<.01)
-      && !fused.some(d=>Math.abs(d.t-contact.t)<.01)) fused.push({...contact,kind:"bat"});
-    return fused.sort((a,b)=>a.t-b.t);
-  }, [sounds, settings, deliveryScan.result]);
+  const setSettings = useCallback((next:ClipSettings)=>{
+    if(JSON.stringify(next.timing)!==JSON.stringify(settings.timing)){
+      scanController.current?.abort();setDeliveryScan(EMPTY_SCAN);
+    }
+    setSettingsState(next);
+  },[settings.timing]);
+
+  const deliveries = useMemo<Delivery[]>(() => {
+    const heard = sounds ? pickShots(selectSounds(sounds, settings.noisy), settings.threshold, settings.gap*(timingFactor(settings.timing)??1)) : [];
+    if (!settings.visual) return heard;
+    if (!deliveryScan.result?.poseActions || timingFactor(settings.timing)==null) return [];
+    return categorizeDeliveries(deliveryScan.result.poseActions,heard,timingFactor(settings.timing)??1).map(d=>({
+      t:d.contact??d.t,rel:0,kind:d.contact!=null?"bat":"motion",actionTime:d.t,category:d.category,poseConfidence:d.confidence,
+    }));
+  }, [sounds,settings,deliveryScan.result]);
 
   const clips: Clip[] = useMemo(() => {
     const duration = meta?.duration ?? Infinity;
     const kept = deliveries.filter((d) => !removed.has(deliveryId(d)));
-    const auto: Clip[] = clipWindows(kept, settings.leadIn, settings.length, duration).map(({ delivery: d, start, end }) => ({
+    const auto: Clip[] = clipWindows(kept, settings.leadIn*(timingFactor(settings.timing)??1), settings.length*(timingFactor(settings.timing)??1), duration).map(({ delivery: d, start, end }) => ({
       id: deliveryId(d),
-      reviewRequired: !deliveryScan.result?.verifiedContacts?.some(t=>Math.abs(t-d.t)<.01),
+      reviewRequired: d.category!=="contact" || (d.poseConfidence??0)<.7,
+      category:d.category,poseConfidence:d.poseConfidence,
       start,
       end,
       contact: d.kind === "motion" ? null : d.t,
@@ -286,7 +299,7 @@ export function VideoProvider({ children }: { children: React.ReactNode }) {
       manual: false,
     }));
     return [...auto, ...manual].sort((a, b) => a.start - b.start);
-  }, [deliveries, manual, removed, settings.leadIn, settings.length, deliveryScan.result, meta]);
+  }, [deliveries, manual, removed, settings.leadIn, settings.length, settings.timing, meta]);
 
   const addManualClip = useCallback(
     (time: number) => {

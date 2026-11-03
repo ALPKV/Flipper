@@ -1,5 +1,6 @@
+import type { DeliveryCategory } from "./pose-actions.ts";
 /** A shot found from the sound: bat contact time and loudness against the session's big hits (dB). */
-export type Delivery = { t: number; rel: number; kind?: "bat" | "motion"; actionTime?: number };
+export type Delivery = { t: number; rel: number; kind?: "bat" | "motion"; actionTime?: number; category?: DeliveryCategory; poseConfidence?: number };
 
 export const deliveryId = (d: Delivery) => `${d.kind === "motion" ? "v" : "a"}${d.t.toFixed(3)}`;
 

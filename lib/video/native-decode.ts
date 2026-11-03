@@ -8,11 +8,11 @@ const open = (file: File) => new Input({ formats: ALL_FORMATS, source: new BlobS
 const check = (signal?: AbortSignal) => { if (signal?.aborted) throw new DOMException("Canceled", "AbortError"); };
 
 /** Frame stepping reads the file's actual PTS values, including variable-frame-rate video. */
-export async function frameTimeline(file: File, signal: AbortSignal) {
+export async function frameTimeline(file: File, signal: AbortSignal, maxSeconds = 15) {
   const input = open(file);
   try {
     const duration = await input.computeDuration();
-    if (duration > 15) throw new Error("Choose one delivery, up to 15 seconds.");
+    if (duration > maxSeconds) throw new Error(`Choose one delivery, up to ${maxSeconds} video seconds for the selected playback settings.`);
     const track = await input.getPrimaryVideoTrack();
     if (!track) throw new Error("No video track found.");
     const times: number[] = [];

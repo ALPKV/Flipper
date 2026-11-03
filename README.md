@@ -74,3 +74,32 @@ repository still contain it. Don't reuse those passwords anywhere.
 - No new ball model was trained in this change. Ball tracking and speed/length remain experimental and unvalidated against radar or calibrated bounce coordinates.
 
 See `FIX-VALIDATION.md` for measured checks and remaining limits.
+
+
+## Pose-first delivery analysis (3 November 2026)
+
+Clip Farmer now samples body landmarks with MediaPipe Pose Landmarker Lite in a browser worker.
+A same-person arm lift, whip and drop, or a cropped forward follow-through, creates an action candidate.
+Audio only categorizes those candidates: contact-like sound, no clear contact, or ambiguous sound.
+Audio cannot create a delivery in pose-first mode, including while the pose scan is pending.
+The explicitly selected sound-only mode remains a manual-review fallback.
+
+Speed Check combines arm-whip release candidates, ball flight/bounce and acoustic contact timing.
+A cropped follow-through never supplies release time. Missing flight evidence withholds an automatic speed.
+Speed is average distance/time, not radar release speed. Pose timing can precede actual ball release.
+Known constant slow motion requires capture/export FPS; unknown or variable-speed edits withhold speed.
+
+This is experimental, not a trained cricket-action classifier. Development recordings exposed missed
+releases, identity fragmentation and other players' arm movements mistaken for bowling. Zero false
+positives and complete delivery coverage have NOT been achieved. Local browser smoke testing found
+one pose-defined, sound-matched candidate in a 3.2-second excerpt; this is not accuracy validation.
+
+### Model provenance
+
+`@mediapipe/tasks-vision` is pinned to 1.2.0. Build/dev copies its runtime into `/vendor/mediapipe`.
+`public/models/pose_landmarker_lite.task` is the official Google MediaPipe float16 version 1 asset:
+https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/1/pose_landmarker_lite.task
+SHA256: `59929e1d1ee95287735ddd833b19cf4ac46d29bc7afddbbf6753c459690d574a`.
+See Google's model documentation and applicable license:
+https://ai.google.dev/edge/mediapipe/solutions/vision/pose_landmarker
+Neither videos nor body landmarks are uploaded. No GPU/cloud account is required.

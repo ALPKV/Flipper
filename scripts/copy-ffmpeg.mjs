@@ -4,3 +4,5 @@ import { cpSync, mkdirSync } from "node:fs";
 
 mkdirSync("public/vendor/ffmpeg", { recursive: true });
 cpSync("node_modules/@ffmpeg/ffmpeg/dist/esm", "public/vendor/ffmpeg", { recursive: true });
+mkdirSync("public/vendor/mediapipe", { recursive: true });
+cpSync("node_modules/@mediapipe/tasks-vision/wasm", "public/vendor/mediapipe", { recursive: true });

@@ -4,6 +4,7 @@ import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { download, exportReel, isTouchDevice, releaseEngine } from "@/lib/video/ffmpeg";
 import { planExport } from "@/lib/video/export-plan";
 import { Button, Meter, Panel } from "../ui";
+import { TimingControl } from "./video-timing";
 import { Stage } from "./stage";
 import { FileBar, VideoDrop, clock } from "./video-drop";
 import { useVideo } from "./video-context";
@@ -41,8 +42,8 @@ export function Highlights() {
   const generation = useRef(0);
   const touch = useSyncExternalStore(subscribe, isTouchDevice, serverFalse);
   useEffect(() => {
-    if (v.url && v.settings.visual && v.audio.status !== "loading" && v.deliveryScan.status === "idle") void scanVideo();
-  }, [v.url, v.settings.visual, v.audio.status, v.deliveryScan.status, scanVideo]);
+    if (v.url && v.settings.visual && v.deliveryScan.status === "idle") void scanVideo();
+  }, [v.url, v.settings.visual, v.deliveryScan.status, scanVideo]);
   useEffect(() => () => { cancelScan(); generation.current++; releaseEngine(); }, [cancelScan]);
   useEffect(() => () => { if (output) URL.revokeObjectURL(output.url); }, [output]);
   useEffect(() => { generation.current++; }, [v.file]);
@@ -85,21 +86,22 @@ export function Highlights() {
     <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_320px]">
       <div className="min-w-0 space-y-5">
         <Panel title="Find the deliveries">
-          <p className="text-sm text-slate">Sound locates possible contacts. Movement narrows the search, then a frame-by-frame ball-flight check decides which events enter the automatic selection. Every accepted shot is kept. Output duration follows the number of genuine shots; there is no five-minute quota.</p>
-          <label className="mt-4 block"><span className="label">Detection</span><select aria-label="Detection" className="field" disabled={videoRunning || exporting} value={v.settings.visual?"full":"audio"} onChange={e=>v.setSettings({...v.settings,visual:e.target.value==="full"})}><option value="full">Sound + movement</option><option value="audio">Sound only — manual review required</option></select></label>
+          <p className="text-sm text-slate">Pose tracking first identifies a bowling-action sequence. Sound is then checked inside each detected delivery window and categorized as contact, no clear contact, or ambiguous. Unmatched sounds do not create deliveries. Every accepted shot is kept. Output duration follows the number of genuine shots; there is no five-minute quota.</p>
+          <div className="mt-4"><TimingControl value={v.settings.timing} disabled={videoRunning||exporting} onChange={timing=>v.setSettings({...v.settings,timing})}/></div>
+          <label className="mt-4 block"><span className="label">Detection</span><select aria-label="Detection" className="field" disabled={videoRunning || exporting} value={v.settings.visual?"full":"audio"} onChange={e=>v.setSettings({...v.settings,visual:e.target.value==="full"})}><option value="full">Pose first → sound classification</option><option value="audio">Sound only — manual review required</option></select></label>
           {audioRunning ? <div role="status" className="mt-3"><p className="mb-2 text-sm">Checking sound · {Math.round(v.audio.progress*100)}%</p><Meter value={v.audio.progress} max={1}/></div> : null}
-          {videoRunning ? <div role="status" className="mt-3"><p className="mb-2 text-sm">Checking movement and ball flight · {Math.round(v.deliveryScan.progress*100)}%</p><Meter value={v.deliveryScan.progress} max={1}/><Button className="mt-2" size="sm" tone="ghost" onClick={cancelScan}>Cancel movement check</Button></div> : null}
-          {result && v.settings.visual ? <p className="mt-3 text-xs text-mute">{covered}% decoded coverage. Only events passing the ball-flight check enter the automatic selection. This detector is not yet independently validated.</p> : null}
-          {v.deliveryScan.status==="error" ? <p role="alert" className="mt-3 text-sm text-risk">{v.deliveryScan.error} Choose sound-only mode or retry.</p> : null}
+          {videoRunning ? <div role="status" className="mt-3"><p className="mb-2 text-sm">{v.deliveryScan.phase??"Following bowling actions"} · {Math.round(v.deliveryScan.progress*100)}%</p><Meter value={v.deliveryScan.progress} max={1}/><Button className="mt-2" size="sm" tone="ghost" onClick={cancelScan}>Cancel pose check</Button></div> : null}
+          {result && v.settings.visual ? <p className="mt-3 text-xs text-mute">{covered}% decoded coverage. {result.poseActions?.length??0} pose-defined deliveries. Body landmarks observed in {result.poseStats?.withPose??0}/{result.poseStats?.decoded??0} sampled frames. Pose plus sound is supporting evidence, not proof of bat contact.</p> : null}
+          {v.deliveryScan.status==="error" ? <p role="alert" className="mt-3 text-sm text-risk">{v.deliveryScan.error} Choose sound-only review or retry.</p> : null}
           {v.audio.error ? <p role="alert" className="mt-3 text-sm text-risk">{v.audio.error}</p> : null}
-          {v.settings.visual && !videoRunning && !audioRunning ? <Button className="mt-3" size="sm" tone="ghost" onClick={()=>void scanVideo()}>{result?"Check movement again":"Check movement"}</Button> : null}
+          {v.settings.visual && !videoRunning && !audioRunning ? <Button className="mt-3" size="sm" tone="ghost" onClick={()=>void scanVideo()}>{result?"Analyze poses again":"Analyze poses"}</Button> : null}
         </Panel>
         <Stage clip={v.clips.find(c=>c.id===v.selectedId)??null} showAnalysis={false}/>
         <Panel title="Review the reel" action={<Button size="sm" tone="ghost" onClick={()=>setShowAll(!showAll)}>{showAll?"Show chosen":"Show all candidates"}</Button>}>
           <p className="mb-3 text-sm text-slate">{selected.length} chosen from {v.clips.length} candidates. Review before saving. “Not a delivery” remembers your correction for this recording on this device.</p>
           <ol className="divide-y divide-line">{rows.map(c=><li key={c.id} className={`flex flex-wrap items-center gap-3 py-3 ${selectedIds.has(c.id)?"":"opacity-60"}`}>
             <input type="checkbox" aria-label={`Include delivery at ${clock(c.start)}`} disabled={exporting} checked={selectedIds.has(c.id)} onChange={()=>toggle(c.id)}/>
-            <button className="flex-1 text-left text-sm" onClick={()=>{v.select(c.id);v.seek(c.start,true);}}><b>{clock(c.start)}</b> · {(c.end-c.start).toFixed(1)}s<span className="block text-xs text-mute">{c.reviewRequired?"Unverified event — excluded until included":c.kind==="motion"?"Movement candidate":"Sound / action candidate"}</span></button>
+            <button className="flex-1 text-left text-sm" onClick={()=>{v.select(c.id);v.seek(c.start,true);}}><b>{clock(c.start)}</b> · {(c.end-c.start).toFixed(1)}s<span className="block text-xs text-mute">{c.category==="contact"?"Bowling action + contact sound":c.category==="no-clear-contact"?"Delivery · no clear contact":c.category==="ambiguous-sound"?"Delivery · ambiguous sound":"Audio only · review required"}</span></button>
             <Button size="sm" tone="ghost" disabled={exporting} onClick={()=>{rememberRejection(file,c.id);setSkip(old=>new Set(old).add(c.id));}}>Not a delivery</Button>
           </li>)}</ol>
           {!rows.length ? <p className="text-sm">{pending?"Candidates will appear after analysis.":"No supported deliveries selected. Check all candidates or try sound-only detection."}</p> : null}

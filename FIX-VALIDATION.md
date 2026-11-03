@@ -47,3 +47,14 @@ node --experimental-strip-types scripts/deliveries/eval.mts <audio-directory>
 No new ball weights were trained. Detection quality beyond the measured samples is unknown. Speed/length formulas still depend on assumed distance, first-visible-ball timing, and simplified flight dynamics, and are labeled as estimates. There is no radar validation, metric 3D reconstruction, or validated swing/spin measurement.
 
 Large 4K/iPhone sessions and actual iOS memory behavior have not been verified in this environment. Compact exports cost CPU time. Browser codec support, available memory, and storage policy still vary by device.
+
+
+## 3 November 2026: pose-first experimental pipeline
+
+- 36 unit tests passed, TypeScript and ESLint passed. Production Turbopack build passed in a fresh output directory with font network access.
+- Production browser smoke test: MediaPipe worker loaded local model/runtime; 39/39 sampled frames had at least one body. A 3.2-second netsB excerpt generated one sound-matched, pose-defined candidate.
+- Offline 12 Hz body extraction on longer development footage exposed poor action coverage and false action candidates. Full netsB extraction produced six arm-whip candidates, several far from annotated releases. chatterW produced four arm-whip candidates and one overlapping follow-through candidate. This is NOT accuracy validation and is NOT ready to promise every delivery or zero false positives.
+- The excerpt's actual release is cropped off the left edge. Its follow-through is valid clip evidence only; Speed Check excludes it from release proposals.
+- No new cricket action/ball model trained; MediaPipe is a general human landmark model plus explicit temporal rules. No radar ground truth available.
+- Unknown/mixed slow motion blocks speed. Known constant slow motion normalizes ball timestamps and sound delay; changes to playback timing invalidate old speed evidence.
+- Videos and pose snapshots stay local. No current changes deployed to production hosting.
