@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { detect, defaultDetectOptions, defaultTrackOptions, findBounce, track, type Gray, type TrackPoint } from "../lib/tracking/core.ts";
 import { clipWindows } from "../lib/tracking/deliveries.ts";
-import { findImpacts, isSpeech, pickShots, refineContact, type Sound } from "../lib/tracking/hits.ts";
+import { findImpacts, isSpeech, soundEvents, pickShots, refineContact, type Sound } from "../lib/tracking/hits.ts";
 import { CREASE_TO_CREASE_M, DEFAULT_SETUP, lengthM, lineCm, speedKmh } from "../lib/tracking/metrics.ts";
 
 test("speed is distance over release-to-contact time", () => {
@@ -116,4 +116,28 @@ test("balls close together each keep their own clip", () => {
   for (let k = 1; k < w.length; k++) assert.ok(w[k].start >= w[k - 1].end, "clips overlap");
   // Removing the middle one (Not a shot) gives its neighbours their full length back.
   assert.deepEqual(clipWindows([ball(10), ball(13)], 1, 2.5).map((c) => [c.start, c.end]), [[9, 11.5], [12, 14.5]]);
+});
+
+
+test("sound-only mode keeps quiet and speech-like peaks inside another shot's cut time",()=>{
+ const sounds=[{t:2,levelDb:-10},{t:2.12,levelDb:-65,voice:.95,voiceBefore:0},{t:3.5,levelDb:-35},{t:6,levelDb:-20}];
+ const events=soundEvents(sounds);
+ assert.deepEqual(events.map(e=>e.t),[2,2.12,3.5,6]);
+ const windows=clipWindows(events,1.5,5,8);
+ assert.equal(windows.length,4);
+ for(let i=0;i<windows.length;i++){
+  const w=windows[i];assert.ok(w.start<=w.delivery.t&&w.end>w.delivery.t);
+  assert.ok(w.end>w.start);
+  if(i)assert.ok(w.start>=windows[i-1].end);
+ }
+});
+test("dense sounds at file edges keep positive, bounded cuts without duplicates",()=>{
+ const events=soundEvents([{t:0,levelDb:-20},{t:.12,levelDb:-30},{t:.12,levelDb:-30},{t:.24,levelDb:-20},{t:.99,levelDb:-20}]);
+ const windows=clipWindows(events,1.5,5,1);
+ assert.equal(windows.length,4);
+ for(let i=0;i<windows.length;i++){
+ const w=windows[i];assert.ok(w.start>=0&&w.end<=1&&w.start<w.end);
+ assert.ok(w.start<=w.delivery.t&&w.end>w.delivery.t);
+ if(i)assert.ok(w.start>=windows[i-1].end);
+ }
 });

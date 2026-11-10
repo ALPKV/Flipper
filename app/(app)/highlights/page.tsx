@@ -8,7 +8,7 @@ export default function ClipsPage() {
   return (
     <>
       <PageHeader eyebrow="Flipper video lab" title="Clip Farmer">
-        Keep the genuine shots and remove the waiting. Output length follows your session, with no artificial time limit.
+        Find sounds, review the clips and save one highlights video. Nearby sounds stay separate, with no overlapping cuts.
       </PageHeader>
       <Container>
         <Highlights />

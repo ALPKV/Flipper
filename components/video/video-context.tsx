@@ -3,10 +3,10 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import type { BallAnalysis } from "@/lib/tracking/analyze";
 import { coverage, type ScanResult } from "@/lib/tracking/visual-deliveries";
-import { categorizeDeliveries, type DeliveryCategory } from "@/lib/tracking/pose-actions";
+import { type DeliveryCategory } from "@/lib/tracking/pose-actions";
 import { NORMAL_TIMING, timingFactor, type VideoTiming } from "@/lib/tracking/video-timing";
 import { clipWindows, deliveryId, type Delivery } from "@/lib/tracking/deliveries";
-import { pickShots, selectSounds, type Sound } from "@/lib/tracking/hits";
+import { soundEvents, type Sound } from "@/lib/tracking/hits";
 import { DEFAULT_SETUP, lengthM, lineCm, speedKmh, type Setup } from "@/lib/tracking/metrics";
 import { extractAudio, releaseEngine } from "@/lib/video/ffmpeg";
 import { captureFrames } from "@/lib/video/frames";
@@ -102,7 +102,7 @@ export function useVideo(): Ctx {
   return v;
 }
 
-const DEFAULT_SETTINGS: ClipSettings = { timing: NORMAL_TIMING, threshold: -25, noisy: false, visual: true, motionSensitivity: .012, gap: 3, leadIn: 1.5, length: 5 };
+const DEFAULT_SETTINGS: ClipSettings = { timing: NORMAL_TIMING, threshold: -25, noisy: false, visual: false, motionSensitivity: .012, gap: 3, leadIn: 1.5, length: 5 };
 const DEFAULT_TRACKING: TrackingSetup = { ...DEFAULT_SETUP, stumps: null };
 
 const emptyMarks = (): Marks => ({
@@ -276,20 +276,15 @@ export function VideoProvider({ children }: { children: React.ReactNode }) {
   },[settings.timing]);
 
   const deliveries = useMemo<Delivery[]>(() => {
-    const heard = sounds ? pickShots(selectSounds(sounds, settings.noisy), settings.threshold, settings.gap*(timingFactor(settings.timing)??1)) : [];
-    if (!settings.visual) return heard;
-    if (!deliveryScan.result?.poseActions || timingFactor(settings.timing)==null) return [];
-    return categorizeDeliveries(deliveryScan.result.poseActions,heard,timingFactor(settings.timing)??1).map(d=>({
-      t:d.contact??d.t,rel:0,kind:d.contact!=null?"bat":"motion",actionTime:d.t,category:d.category,poseConfidence:d.confidence,
-    }));
-  }, [sounds,settings,deliveryScan.result]);
+    return sounds ? soundEvents(sounds) : [];
+  }, [sounds]);
 
   const clips: Clip[] = useMemo(() => {
     const duration = meta?.duration ?? Infinity;
     const kept = deliveries.filter((d) => !removed.has(deliveryId(d)));
     const auto: Clip[] = clipWindows(kept, settings.leadIn*(timingFactor(settings.timing)??1), settings.length*(timingFactor(settings.timing)??1), duration).map(({ delivery: d, start, end }) => ({
       id: deliveryId(d),
-      reviewRequired: d.category!=="contact" || (d.poseConfidence??0)<.7,
+      reviewRequired: false,
       category:d.category,poseConfidence:d.poseConfidence,
       start,
       end,

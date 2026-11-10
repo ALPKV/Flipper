@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
-import { Container, PageHeader } from "@/components/ui";
-import { SpeedCheck } from "@/components/video/speed-check";
-export const metadata: Metadata = { title: "Speed Check" };
+import Link from "next/link";
+import { Container, PageHeader, Panel } from "@/components/ui";
+export const metadata: Metadata = { title: "Speed Check · In progress" };
 export default function TrackingPage() {
-  return <><PageHeader eyebrow="Single delivery" title="Speed Check">Upload one short delivery. Estimate average flight speed from detected timing and your measured distance.</PageHeader><Container><SpeedCheck /></Container></>;
+  return <><PageHeader eyebrow="In progress" title="Speed Check">We’re still working on reliable bowling speed measurement.</PageHeader><Container><Panel title="Still in progress"><p className="text-sm text-slate">Speed Check is under development. Automatic measurements are not available yet.</p><Link className="mt-4 inline-block font-bold underline" href="/highlights">Back to Clip Farmer</Link></Panel></Container></>;
 }

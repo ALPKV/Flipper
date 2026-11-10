@@ -103,3 +103,14 @@ SHA256: `59929e1d1ee95287735ddd833b19cf4ac46d29bc7afddbbf6753c459690d574a`.
 See Google's model documentation and applicable license:
 https://ai.google.dev/edge/mediapipe/solutions/vision/pose_landmarker
 Neither videos nor body landmarks are uploaded. No GPU/cloud account is required.
+
+
+## Sound-only Clip Farmer (10 November 2026)
+
+The active clipper now uses all detected audio onsets directly: no pose scan, speech rejection,
+relative-loudness filter or three-second shot cooldown. The onset detector still separates peaks
+by 120 ms; continuous sound does not become a clip for every sample. Each distinct onset becomes
+an initially selected review candidate. Adjacent cuts meet at their sound timestamps' midpoint,
+so a sound inside another cut is retained without overlapping video. Speech, footsteps and net
+noise may be included: review before exporting. One MP4 export and no duration quota remain.
+Speed Check stays in the navigation with an In progress page; measurements are unavailable.

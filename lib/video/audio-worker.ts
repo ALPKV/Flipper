@@ -6,7 +6,7 @@ self.onmessage = async (event: MessageEvent<{ pcm: ArrayBuffer; sampleRate: numb
     const { sampleRate } = event.data;
     const pcm = new Int16Array(event.data.pcm);
     const impacts = await findImpacts(pcm, sampleRate, (progress) => self.postMessage({ progress }));
-    const sounds = impacts.filter((e) => e.riseDb > 10).map((e) => ({
+    const sounds = impacts.map((e) => ({
       ...e, t: refineContact(pcm, sampleRate, e.t),
     }));
     self.postMessage({ sounds });

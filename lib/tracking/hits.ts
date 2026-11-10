@@ -271,3 +271,13 @@ export function refineContact(pcm: ArrayLike<number>, sampleRate: number, around
   }
   return best / sampleRate;
 }
+
+
+/** Every distinct detected onset, without speech rejection, loudness ranking or a shot cooldown.
+ * The audio detector already separates peaks by 120 ms; cut duration never suppresses an event.
+ */
+export function soundEvents(sounds: Sound[]): {t:number;rel:number}[] {
+  const ordered=sounds.filter(s=>Number.isFinite(s.t)&&s.t>=0&&Number.isFinite(s.levelDb)).sort((a,b)=>a.t-b.t);
+  const reference=ordered.reduce((n,s)=>Math.max(n,s.levelDb),-Infinity);
+  return ordered.filter((s,i)=>i===0||s.t!==ordered[i-1].t).map(s=>({t:s.t,rel:s.levelDb-reference}));
+}

@@ -15,16 +15,15 @@ export function clipWindows(
   length: number,
   duration = Infinity,
 ): { delivery: Delivery; start: number; end: number }[] {
-  const list = [...deliveries].sort((a, b) => a.t - b.t);
-  return list.map((d, k) => {
-    let start = Math.max(0, d.t - leadIn);
-    // Motion peaks are action candidates, not contact timestamps. Include follow-through without
-    // shifting them to a made-up contact time.
-    let end = Math.min(duration, start + (d.kind === "motion" ? Math.max(3.5, length) : length));
-    const prev = list[k - 1];
-    const next = list[k + 1];
-    if (prev) start = Math.min(Math.max(start, (prev.t + d.t) / 2, prev.t + 0.3), d.t - 0.2);
-    if (next) end = Math.max(Math.min(end, (d.t + next.t) / 2, next.t - 0.3), d.t + 0.2);
-    return { delivery: d, start, end: Math.min(duration, end) };
+  const list = [...deliveries].filter(d=>Number.isFinite(d.t)&&d.t>=0&&d.t<duration)
+    .sort((a,b)=>a.t-b.t).filter((d,i,all)=>i===0||d.t!==all[i-1].t);
+  return list.map((d,k)=> {
+    const previous=list[k-1],next=list[k+1];
+    // A shared midpoint splits neighbouring windows even when sounds are very close.
+    // Keep each onset inside its own clip; never drop a sound because another cut covers it.
+    const desiredStart=Math.max(0,d.t-leadIn);
+    const start=Math.max(desiredStart,previous?(previous.t+d.t)/2:0);
+    const end=Math.min(duration,Math.max(d.t+.001,desiredStart+(d.kind==="motion"?Math.max(3.5,length):length)),next?(d.t+next.t)/2:Infinity);
+    return {delivery:d,start,end};
   });
 }
