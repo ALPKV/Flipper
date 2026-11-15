@@ -1,5 +1,6 @@
 "use client";
 
+import {reelRanges} from "./reel-ranges";
 import type { FFmpeg } from "@ffmpeg/ffmpeg";
 
 /**
@@ -48,6 +49,9 @@ async function getFFmpeg(): Promise<FFmpeg> {
   }
   return instance;
 }
+
+/** Load/cache the engine while the user reviews clips rather than after Export. */
+export async function prepareExport(){await getFFmpeg();}
 
 /**
  * Shuts the engine down. WebAssembly memory only grows, so after a big job the worker would keep
@@ -168,6 +172,14 @@ export async function exportReel(
   { precise = false }: { precise?: boolean } = {},
 ): Promise<Blob> {
   try {
+    clips=reelRanges(clips);
+    if(!clips.length)throw new Error("Select at least one clip to export.");
+    if(clips.length===1)return await withFile(file,async(ff,path)=>{
+      await cut(ff,path,clips[0].start,clips[0].end-clips[0].start,"/reel.mp4",precise);
+      const data=await ff.readFile("/reel.mp4") as Uint8Array;
+      const blob=new Blob([data.slice()],{type:"video/mp4"});
+      await ff.deleteFile("/reel.mp4");onProgress?.(1);return blob;
+    },true);
     const parts = await withFile(file, async (ff, path) => {
       const out: { name: string; data: Blob }[] = [];
       for (let k = 0; k < clips.length; k++) {

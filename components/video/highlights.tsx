@@ -1,11 +1,13 @@
 "use client";
 
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
-import { canSaveToPhotos, download, exportReel, isApple, isTouchDevice, releaseEngine, saveToPhotos } from "@/lib/video/ffmpeg";
+import { canSaveToPhotos, download, exportReel, isApple, isTouchDevice, releaseEngine, prepareExport, saveToPhotos } from "@/lib/video/ffmpeg";
 import { planExport, type ExportQuality } from "@/lib/video/export-plan";
 import { Button, Meter, Panel } from "../ui";
 import { Stage } from "./stage";
 import { FileBar, VideoDrop, clock } from "./video-drop";
+import {ReelPreview} from "./reel-preview";
+import {reelRanges} from "@/lib/video/reel-ranges";
 import { useVideo } from "./video-context";
 
 const subscribe = () => () => {};
@@ -34,6 +36,7 @@ export function Highlights() {
   const [pinned, setPinned] = useState<Set<string>>(new Set());
   const [forFile, setForFile] = useState(v.file);
   const [output, setOutput] = useState<Output | null>(null);
+  const [engineState,setEngineState]=useState("Preparing export engine…");
   const [exporting, setExporting] = useState(false);
   const [progress, setProgress] = useState(0);
   const [error, setError] = useState<string | null>(null);
@@ -46,6 +49,12 @@ export function Highlights() {
   useEffect(() => () => { cancelScan(); generation.current++; releaseEngine(); }, [cancelScan]);
   useEffect(() => () => { if (output) URL.revokeObjectURL(output.url); }, [output]);
   useEffect(() => { generation.current++; }, [v.file]);
+  useEffect(()=>{
+    if(!v.file)return;
+    let active=true;
+    void prepareExport().then(()=>{if(active)setEngineState("Export engine ready");}).catch(()=>{if(active)setEngineState("Export engine will retry when you export");});
+    return ()=>{active=false;};
+  },[v.file]);
   if (forFile !== v.file) {
     setForFile(v.file); setSkip(rejected(v.file)); setPinned(new Set());
     setOutput(null); setExporting(false); setError(null); setUndo(null);
@@ -58,9 +67,10 @@ export function Highlights() {
     .map(c=>({...c, priority: pinned.has(c.id) ? 100 : c.kind === "bat" ? 2 : 1}));
   const selected = candidates.sort((a,b)=>a.start-b.start);
   const selectedIds = new Set(selected.map(c=>c.id));
-  const seconds = selected.reduce((n,c)=>n+c.end-c.start,0);
+  const ranges=reelRanges(selected);
+  const seconds = ranges.reduce((n,c)=>n+c.end-c.start,0);
   const duration = v.meta?.duration ?? 1;
-  const plan = planExport(file.size, duration, seconds, selected.length, quality, touch);
+  const plan = planExport(file.size, duration, seconds, ranges.length, quality, touch);
   const signature = quality+"|"+selected.map(c=>`${c.id}:${c.start}:${c.end}`).join("|");
   const ready = output && (output.signature===signature || v.clips.some(c=>output.signature===`single:${c.id}:${c.start}:${c.end}:${quality}`)) ? output : null;
   const rows = showAll ? v.clips : v.clips.filter(c=>selectedIds.has(c.id));
@@ -96,6 +106,7 @@ export function Highlights() {
 
         </Panel>
         <Stage clip={v.clips.find(c=>c.id===v.selectedId)??null} showAnalysis={false}/>
+        <ReelPreview key={signature} url={v.url!} ranges={ranges}/>
         <Panel title="Review the reel" action={<Button size="sm" tone="ghost" onClick={()=>setShowAll(!showAll)}>{showAll?"Show chosen":"Show all candidates"}</Button>}>
           <p className="mb-3 text-sm text-slate">{selected.length} chosen from {v.clips.length} candidates. Review before saving. “Not a delivery” remembers your correction for this recording on this device.</p>
           <div className="mb-3 flex flex-wrap gap-2">
@@ -120,6 +131,7 @@ export function Highlights() {
           <label className="mt-4 block text-sm">Export quality<select aria-label="Export quality" className="field mt-1" disabled={exporting} value={quality} onChange={e=>setQuality(e.target.value as ExportQuality)}><option value="compact">Smaller 720p — exact cuts</option><option value="auto">Recommended — one file</option><option value="original">Original quality — faster</option></select></label>
           <p className="mt-2 text-xs text-mute">Estimated size: {Math.ceil(plan.estimatedBytes/1e6)} MB. Original-quality cuts may include extra footage near keyframes.</p>
           <Button className="mt-4 w-full" tone="gold" disabled={pending || exporting || !selected.length || !plan.fits} onClick={()=>void build()}>{exporting?"Making your reel…":"Create highlights"}</Button>
+          <p role="status" className="mt-2 text-xs text-mute">{exporting?`Creating MP4 · ${Math.round(progress*100)}%`:engineState}</p>
           {exporting ? <div className="mt-3"><Meter value={progress} max={1}/><Button className="mt-2" size="sm" tone="ghost" onClick={()=>{generation.current++;releaseEngine();setExporting(false);setError("Export canceled. Your choices are still here.");}}>Cancel export</Button></div> : null}
           {!plan.fits ? <p className="mt-3 text-sm text-risk">This output exceeds this device&apos;s memory budget. Exclude some candidates before exporting.</p> : null}
           {error ? <p role="alert" className="mt-3 text-sm text-risk">{error}</p> : null}

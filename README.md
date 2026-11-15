@@ -126,3 +126,16 @@ update without decoding audio again. Speed Check remains an In progress page.
 39 unit tests and production build passed. Browser checks confirmed that 0.1s before/0.2s after
 keeps all seven sample events, selection shortcuts work, and Big hits only reduces the sample
 to one event. Gallery sharing depends on browser/OS support.
+
+
+## Highlights preview and export startup
+
+Preview highlights plays selected source spans directly, with a highlights-time scrubber and
+pause/replay, before any MP4 is generated. Changing selection/timing resets the preview.
+FFmpeg is prepared while reviewing, using its existing local cache. Adjacent/overlapping
+selected ranges are rendered once; a single resulting span bypasses the join step. Excluded
+gaps remain excluded. Exact 720p remains the default; this optimization does not change to
+keyframe cuts or upload footage. Long exact encodes still depend on device speed.
+42 unit tests, lint, typecheck and production build passed. Local browser checks verified
+preview playback of two separate selected spans, and a 3.2-second MP4 from seven touching
+sound clips (one render instead of seven renders plus a join). No universal speedup claimed.
