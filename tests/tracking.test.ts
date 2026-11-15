@@ -141,3 +141,14 @@ test("dense sounds at file edges keep positive, bounded cuts without duplicates"
  if(i)assert.ok(w.start>=windows[i-1].end);
  }
 });
+
+test("custom before and after timing updates windows and clamps recording edges",()=>{
+ const [middle]=clipWindows([{t:10,rel:0}],2,6,30);
+ assert.deepEqual([middle.start,middle.end],[8,14]);
+ const [early]=clipWindows([{t:.5,rel:0}],2,6,30);
+ assert.deepEqual([early.start,early.end],[0,4.5]);
+ const [last]=clipWindows([{t:29,rel:0}],2,6,30);
+ assert.deepEqual([last.start,last.end],[27,30]);
+ const dense=clipWindows([{t:10,rel:0},{t:10.2,rel:0}],4,12,30);
+ assert.equal(dense.length,2);assert.equal(dense[0].end,dense[1].start);
+});

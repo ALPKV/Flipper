@@ -114,3 +114,15 @@ an initially selected review candidate. Adjacent cuts meet at their sound timest
 so a sound inside another cut is retained without overlapping video. Speech, footsteps and net
 noise may be included: review before exporting. One MP4 export and no duration quota remain.
 Speed Check stays in the navigation with an In progress page; measurements are unavailable.
+
+
+## Restored clip controls (15 November 2026)
+
+Before/after sound timing, sound presets/custom sensitivity, optional Noisy hall filtering,
+select all/none, undo exclusion, add at playhead, individual clip export, export quality and
+supported browser gallery sharing are available again. All sounds remains the default and
+there is no shot cooldown. Adjacent automatic cuts still split at the midpoint; timing controls
+update without decoding audio again. Speed Check remains an In progress page.
+39 unit tests and production build passed. Browser checks confirmed that 0.1s before/0.2s after
+keeps all seven sample events, selection shortcuts work, and Big hits only reduces the sample
+to one event. Gallery sharing depends on browser/OS support.

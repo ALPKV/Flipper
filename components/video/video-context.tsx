@@ -6,7 +6,7 @@ import { coverage, type ScanResult } from "@/lib/tracking/visual-deliveries";
 import { type DeliveryCategory } from "@/lib/tracking/pose-actions";
 import { NORMAL_TIMING, timingFactor, type VideoTiming } from "@/lib/tracking/video-timing";
 import { clipWindows, deliveryId, type Delivery } from "@/lib/tracking/deliveries";
-import { soundEvents, type Sound } from "@/lib/tracking/hits";
+import { soundEvents, selectSounds, type Sound } from "@/lib/tracking/hits";
 import { DEFAULT_SETUP, lengthM, lineCm, speedKmh, type Setup } from "@/lib/tracking/metrics";
 import { extractAudio, releaseEngine } from "@/lib/video/ffmpeg";
 import { captureFrames } from "@/lib/video/frames";
@@ -102,7 +102,7 @@ export function useVideo(): Ctx {
   return v;
 }
 
-const DEFAULT_SETTINGS: ClipSettings = { timing: NORMAL_TIMING, threshold: -25, noisy: false, visual: false, motionSensitivity: .012, gap: 3, leadIn: 1.5, length: 5 };
+const DEFAULT_SETTINGS: ClipSettings = { timing: NORMAL_TIMING, threshold: -120, noisy: false, visual: false, motionSensitivity: .012, gap: 3, leadIn: 1.5, length: 5 };
 const DEFAULT_TRACKING: TrackingSetup = { ...DEFAULT_SETUP, stumps: null };
 
 const emptyMarks = (): Marks => ({
@@ -276,8 +276,8 @@ export function VideoProvider({ children }: { children: React.ReactNode }) {
   },[settings.timing]);
 
   const deliveries = useMemo<Delivery[]>(() => {
-    return sounds ? soundEvents(sounds) : [];
-  }, [sounds]);
+    return sounds ? soundEvents(settings.noisy ? selectSounds(sounds,true) : sounds).filter(d=>settings.threshold<=-120||d.rel>=settings.threshold) : [];
+  }, [sounds,settings.threshold,settings.noisy]);
 
   const clips: Clip[] = useMemo(() => {
     const duration = meta?.duration ?? Infinity;
@@ -298,12 +298,12 @@ export function VideoProvider({ children }: { children: React.ReactNode }) {
 
   const addManualClip = useCallback(
     (time: number) => {
-      const duration = meta?.duration ?? time + 2;
-      const start = Math.max(0, time - 1.5);
+      const duration = meta?.duration ?? time + settings.length;
+      const start = Math.max(0, time - settings.leadIn);
       const clip: Clip = {
         id: `m${time.toFixed(3)}`,
         start,
-        end: Math.min(duration, time + 1),
+        end: Math.min(duration, time + Math.max(.1,settings.length-settings.leadIn)),
         contact: null,
         level: null,
         kind: "manual",
@@ -312,7 +312,7 @@ export function VideoProvider({ children }: { children: React.ReactNode }) {
       setManual((m) => (m.some((c) => c.id === clip.id) ? m : [...m, clip]));
       return clip;
     },
-    [meta],
+    [meta,settings.leadIn,settings.length],
   );
 
   const removeClip = useCallback((id: string) => {

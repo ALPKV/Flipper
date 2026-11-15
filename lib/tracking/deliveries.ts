@@ -23,7 +23,7 @@ export function clipWindows(
     // Keep each onset inside its own clip; never drop a sound because another cut covers it.
     const desiredStart=Math.max(0,d.t-leadIn);
     const start=Math.max(desiredStart,previous?(previous.t+d.t)/2:0);
-    const end=Math.min(duration,Math.max(d.t+.001,desiredStart+(d.kind==="motion"?Math.max(3.5,length):length)),next?(d.t+next.t)/2:Infinity);
+    const end=Math.min(duration,Math.max(d.t+.001,d.t-leadIn+(d.kind==="motion"?Math.max(3.5,length):length)),next?(d.t+next.t)/2:Infinity);
     return {delivery:d,start,end};
   });
 }
