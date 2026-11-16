@@ -122,7 +122,7 @@ export function Highlights() {
 
         </Panel>
         <Stage clip={v.clips.find(c=>c.id===v.selectedId)??null} showAnalysis={false}/>
-        <ReelPreview key={signature} file={file} ranges={ranges} frameCounts={frameCounts} disabled={pending||exporting||!plan.fits} onBusy={setPreviewing}/>
+        <ReelPreview key={signature} file={file} ranges={ranges} frameCounts={frameCounts} blockedReason={pending?`Sound analysis is still running (${Math.round(v.audio.progress*100)}%). Preview will be ready when it finishes.`:exporting?"An export is running. Finish or cancel it before preparing a preview.":null} onBusy={setPreviewing}/>
         <Panel title="Review the reel" action={<Button size="sm" tone="ghost" onClick={()=>setShowAll(!showAll)}>{showAll?"Show chosen":"Show all candidates"}</Button>}>
           <p className="mb-3 text-sm text-slate">{selected.length} chosen from {v.clips.length} candidates. Review before saving. “Not a delivery” remembers your correction for this recording on this device.</p>
           <div className="mb-3 flex flex-wrap gap-2">

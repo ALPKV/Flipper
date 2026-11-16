@@ -161,3 +161,14 @@ serialized and editing is disabled during either job. No new cloud processing.
 127 BPM/2-beat 480p preview and 720p output, both about 1.923s including audio codec padding.
 Local waveform matching verified source crop continuity; audio encoder delay remained below
 one 30fps frame in this short sample. This is not validation of real bat-contact classification.
+
+
+## Preview availability fix
+
+Preview no longer inherits the full-export memory-budget lock. A separate preview plan caps
+rendering at the first 90 seconds (whole beat slots in beat mode), with an explicit notice;
+full export selection is unchanged. Analysis/export waits and empty selections have visible
+explanations. Prepare preview responds with the relevant explanation instead of silently
+remaining disabled. Only an active preview disables its own button, with Cancel available.
+48 unit tests, lint, typecheck and production build pass, including long-export/short-preview
+regressions. Browser testing confirmed Prepare preview starts rendering after analysis.
