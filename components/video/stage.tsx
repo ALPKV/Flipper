@@ -97,7 +97,7 @@ export function Stage({
     const Y = (y: number) => oy + y * vh;
 
     if (setup.stumps && (calibrating || (overlay && showAnalysis))) {
-      ctx.strokeStyle = "#d5e6bd";
+      ctx.strokeStyle = "#f1d8d2";
       ctx.lineWidth = 2;
       for (const x of [setup.stumps.leftX, setup.stumps.rightX]) {
         ctx.beginPath();
@@ -127,11 +127,11 @@ export function Stage({
     }
     ctx.setLineDash([]);
     for (const p of pts) {
-      ctx.fillStyle = "#284a3a";
+      ctx.fillStyle = "#914741";
       ctx.beginPath();
       ctx.arc(X(p.x), Y(p.y), 3.5, 0, Math.PI * 2);
       ctx.fill();
-      ctx.strokeStyle = "#d5e6bd";
+      ctx.strokeStyle = "#f1d8d2";
       ctx.lineWidth = 1.5;
       ctx.stroke();
     }
@@ -156,9 +156,9 @@ export function Stage({
       const text = `${speed.toFixed(0)} KM/H`;
       ctx.font = "800 italic 26px Arial, sans-serif";
       const w = ctx.measureText(text).width + 24;
-      ctx.fillStyle = "#284a3a";
+      ctx.fillStyle = "#914741";
       ctx.fillRect(ox + 12, oy + 12, w, 40);
-      ctx.fillStyle = "#d5e6bd";
+      ctx.fillStyle = "#f1d8d2";
       ctx.fillRect(ox + 12, oy + 12, 5, 40);
       ctx.fillStyle = "#ffffff";
       ctx.fillText(text, ox + 24, oy + 42);
