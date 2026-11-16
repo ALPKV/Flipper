@@ -139,3 +139,25 @@ keyframe cuts or upload footage. Long exact encodes still depend on device speed
 42 unit tests, lint, typecheck and production build passed. Local browser checks verified
 preview playback of two separate selected spans, and a 3.2-second MP4 from seven touching
 sound clips (one render instead of seven renders plus a join). No universal speedup claimed.
+
+
+## Simple beat reels and smooth preview (16 November 2026)
+
+Normal highlights retains the existing sound-only editing controls. Waka Waka beat reel defaults
+to 127 BPM (source: https://songbpm.com/@shakira/waka-waka-this-time-for-africa), with one hit every
+2, 4 or 8 beats and editable BPM. No song upload/download or music muxing is required. Add music
+later in a reel editor and align a beat with the first output hit time shown in the app.
+Native-speed source windows center each detected contact in its beat slot. Too-close candidates,
+edge-truncated candidates and manual clips without contact marks are counted and identified as
+omitted. All-sounds detection still includes noise; users must choose real bat contacts.
+Beat cuts use cumulative 30 fps frame rounding and explicit concat durations, avoiding cumulative
+per-hit rounding drift. Audio codecs and source contact accuracy can add timing error.
+
+Prepare preview now renders one lightweight 480p MP4 with native playback controls. Preparation
+is an explicit, cancelable step; playback never seeks through the high-resolution original.
+Selections/timing changes invalidate it. 720p final export is separate. Preview and export are
+serialized and editing is disabled during either job. No new cloud processing.
+45 unit tests, lint, typecheck and production build passed. Browser testing produced a two-hit
+127 BPM/2-beat 480p preview and 720p output, both about 1.923s including audio codec padding.
+Local waveform matching verified source crop continuity; audio encoder delay remained below
+one 30fps frame in this short sample. This is not validation of real bat-contact classification.
