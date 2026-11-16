@@ -1,6 +1,6 @@
 "use client";
 
-import {reelRanges} from "./reel-ranges";
+import {reelRanges,type ReelRange} from "./reel-ranges";
 import type { FFmpeg } from "@ffmpeg/ffmpeg";
 
 /**
@@ -140,13 +140,16 @@ export async function extractAudio(
  * snaps to the keyframe before `start`). Precise mode re-encodes, so every clip starts on the exact
  * frame; it is slower and fits the output inside 1280×720 at a bounded bitrate.
  */
-async function cut(ff: FFmpeg, path: string, start: number, duration: number, out: string, precise = false, edge=720, frames?:number) {
+async function cut(ff: FFmpeg, path: string, start: number, duration: number, out: string, precise = false, edge=720, frames?:number,padBefore=0,padAfter=0) {
+  // The last video frame can precede the file's reported duration. Hold it until the
+  // requested frame count, and pad short audio too, so every beat slot stays full.
+  const padding=frames?`,tpad=start_mode=clone:start_duration=${padBefore}:stop_mode=clone:stop=-1`:padBefore||padAfter?`,tpad=start_mode=clone:start_duration=${padBefore}:stop_mode=clone:stop_duration=${padAfter}`:"";
   const codec = precise
-    ? ["-vf", `scale=w='min(${Math.round(edge*16/9)},iw)':h='min(${edge},ih)':force_original_aspect_ratio=decrease:force_divisible_by=2${frames?",fps=30":""}`, "-c:v", "libx264", "-preset", "ultrafast", "-b:v", edge<=480?"700k":"1500k", "-maxrate", edge<=480?"700k":"1500k", "-bufsize", "3000k", "-pix_fmt", "yuv420p", "-c:a", "aac", "-b:a", "96k", "-ar", "44100", "-ac", "2"]
+    ? ["-vf", `scale=w='min(${Math.round(edge*16/9)},iw)':h='min(${edge},ih)':force_original_aspect_ratio=decrease:force_divisible_by=2${frames?",fps=30":""}${padding}`, "-c:v", "libx264", "-preset", "ultrafast", "-b:v", edge<=480?"700k":"1500k", "-maxrate", edge<=480?"700k":"1500k", "-bufsize", "3000k", "-pix_fmt", "yuv420p", "-c:a", "aac", "-b:a", "96k", "-ar", "44100", "-ac", "2"]
     : ["-c", "copy", "-avoid_negative_ts", "make_zero"];
   const code = await ff.exec([
-    "-ss", start.toFixed(3), "-i", path, "-t", duration.toFixed(3),
-    "-map", "0:v:0", "-map", "0:a:0?", ...codec, ...(frames?["-frames:v",String(frames)]:[]), "-movflags", "+faststart", out,
+    "-ss", start.toFixed(6), "-i", path, "-t", (frames?frames/30:duration).toFixed(6),
+    "-map", "0:v:0", "-map", "0:a:0?", ...codec, ...(frames||padBefore||padAfter?["-af",`adelay=${Math.round(padBefore*1000)}:all=1,apad`]:[]), ...(frames?["-frames:v",String(frames)]:[]), "-movflags", "+faststart", out,
   ]);
   if (code !== 0) throw new Error("FFmpeg could not cut this clip.");
 }
@@ -167,7 +170,7 @@ export async function exportClip(file: File, start: number, duration: number): P
  */
 export async function exportReel(
   file: File,
-  clips: { start: number; end: number }[],
+  clips: ReelRange[],
   onProgress?: (fraction: number) => void,
   { precise = false, preview = false, frameCounts }: { precise?: boolean;preview?:boolean;frameCounts?:number[] } = {},
 ): Promise<Blob> {
@@ -176,7 +179,7 @@ export async function exportReel(
     if(frameCounts&&(frameCounts.length!==clips.length||frameCounts.some(n=>!Number.isInteger(n)||n<=0)))throw new Error("Invalid beat timing.");
     if(!clips.length)throw new Error("Select at least one clip to export.");
     if(clips.length===1)return await withFile(file,async(ff,path)=>{
-      await cut(ff,path,clips[0].start,clips[0].end-clips[0].start,"/reel.mp4",precise||preview||!!frameCounts,preview?480:720,frameCounts?.[0]);
+      await cut(ff,path,clips[0].start,clips[0].end-clips[0].start,"/reel.mp4",precise||preview||!!frameCounts,preview?480:720,frameCounts?.[0],clips[0].padBefore,clips[0].padAfter);
       const data=await ff.readFile("/reel.mp4") as Uint8Array;
       const blob=new Blob([data.slice()],{type:"video/mp4"});
       await ff.deleteFile("/reel.mp4");onProgress?.(1);return blob;
@@ -184,7 +187,7 @@ export async function exportReel(
     const parts = await withFile(file, async (ff, path) => {
       const out: { name: string; data: Blob }[] = [];
       for (let k = 0; k < clips.length; k++) {
-        await cut(ff, path, clips[k].start, clips[k].end - clips[k].start, "/part.mp4", precise||preview||!!frameCounts,preview?480:720,frameCounts?.[k]);
+        await cut(ff, path, clips[k].start, clips[k].end - clips[k].start, "/part.mp4", precise||preview||!!frameCounts,preview?480:720,frameCounts?.[k],clips[k].padBefore,clips[k].padAfter);
         const data = (await ff.readFile("/part.mp4")) as Uint8Array;
         await ff.deleteFile("/part.mp4");
         out.push({ name: `p${k}.mp4`, data: new Blob([data.slice()], { type: "video/mp4" }) });

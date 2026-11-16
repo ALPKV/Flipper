@@ -26,8 +26,8 @@ export function VideoDrop() {
         setOver(false);
         pick(e.dataTransfer.files);
       }}
-      className={`flex flex-col items-center justify-center gap-4 border-2 border-dashed px-6 py-16 text-center transition-colors ${
-        over ? "border-gold bg-gold/10" : "border-navy/25 bg-white"
+      className={`flex flex-col items-center justify-center gap-4 rounded-xl border border-dashed px-6 py-20 text-center transition-colors ${
+        over ? "border-gold bg-gold/10" : "border-line bg-white"
       }`}
     >
       <svg viewBox="0 0 48 48" className="h-12 w-12 text-navy" aria-hidden>
@@ -35,7 +35,7 @@ export function VideoDrop() {
         <path d="M34 20l10-6v20l-10-6z" fill="currentColor" />
       </svg>
       <div>
-        <p className="display text-2xl font-extrabold text-navy">Drop a net session video</p>
+        <p className="text-2xl font-semibold tracking-tight text-ink">Start with your recording</p>
         <p className="mt-1 text-sm text-slate">
           MP4 or MOV from your phone. It stays on this device. Nothing is uploaded.
         </p>
@@ -49,7 +49,7 @@ export function VideoDrop() {
         onChange={(e) => pick(e.target.files)}
       />
       <p className="max-w-lg text-xs text-mute">
-        Best results: tripod, 60 fps or more, the bowler&apos;s release and the batter both in view.
+        Sound-based clipping · all detections kept · video stays on your device
       </p>
     </div>
   );
@@ -60,7 +60,7 @@ export function FileBar() {
   if (!file) return null;
   const mb = file.size / (1024 * 1024);
   return (
-    <div className="flex flex-wrap items-center gap-x-6 gap-y-2 border border-line bg-white px-4 py-3 text-sm">
+    <div className="flex flex-wrap items-center gap-x-6 gap-y-2 rounded-lg border border-line bg-white px-4 py-3 text-sm">
       <div className="min-w-0">
         <p className="eyebrow text-mute">Video</p>
         <p className="truncate font-semibold text-ink">{file.name}</p>
@@ -82,7 +82,7 @@ export function FileBar() {
                   : "—"
         }
       />
-      <button onClick={clearFile} className="ml-auto font-display text-sm font-bold uppercase tracking-wider text-navy underline-offset-4 hover:underline">
+      <button onClick={clearFile} className="ml-auto text-xs font-semibold text-navy underline-offset-4 hover:underline">
         Change video
       </button>
     </div>

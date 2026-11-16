@@ -172,3 +172,41 @@ explanations. Prepare preview responds with the relevant explanation instead of 
 remaining disabled. Only an active preview disables its own button, with Cancel available.
 48 unit tests, lint, typecheck and production build pass, including long-export/short-preview
 regressions. Browser testing confirmed Prepare preview starts rendering after analysis.
+
+
+## Offset and preserve every detected clip
+
+Timing offset shifts each target by -15 to +15 seconds without changing candidate count.
+Positive values shift later than the detected sound (for example, from a bowling-machine noise
+toward contact). Before/after controls define the surrounding window; reduce Before sound if
+the machine noise should be outside the cut. Normal clips retain their complete windows,
+including overlap. Export no longer unions overlapping/adjacent sections or drops repeated
+sections. All detected candidates are initially selected each time a recording loads.
+Speech/loudness filtering is disabled in the active clipper; manual exclusions still work.
+
+Beat mode keeps every selected candidate, including close, edge and manual candidates.
+Overlapping footage repeats intentionally. Held frames and silent audio padding fill beat slots
+at recording boundaries. Extreme offsets clamp the target to available footage; no new footage
+or real contact is inferred. The onset detector still has finite sensitivity/resolution: this
+change guarantees retention of its candidates, not detection of every physical delivery.
+
+50 tests, lint, typecheck and production build pass. Browser checks retained all 7 sample
+candidates after +1s offset and in 4-beat mode, producing a 13.256s 480p preview including codec
+padding. Preview's 90s sample limit is independent of the full export selection.
+
+
+## Editor redesign and GPT Astra review
+
+The editor now uses a warm white/graphite/forest palette, system typography, a preview-first
+workspace and a right-side timing/export column on desktop. The original recording and frame
+controls are collapsible; choosing a clip opens them. All offset, manual clipping, beat timing,
+individual export and keep-every-candidate controls remain available. Font downloads are removed.
+
+GPT Astra independently reviewed the export pipeline and verified real FFmpeg frame counts.
+It fixed short-video/long-audio beat slots (41/57 frames before, 57/57 after), retained end-of-file
+candidates, and verified 57/57 leading-edge plus 114/114 short silent-video padding cases.
+52 tests, typecheck, lint and production build pass. New UI browser verification was explicitly
+declined, so the redesigned layout has not been visually verified. The earlier offset/overlap
+browser tests apply to the functional implementation, before the visual restyle.
+Next.js and matching ESLint config received the minimal 16.4.5 security patch. Production audit
+reported no known vulnerabilities after the patch; other pinned dependencies are unchanged.

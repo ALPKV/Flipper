@@ -14,6 +14,6 @@ export function previewPlan(ranges:ReelRange[],frameCounts?:number[],limit=90){
    const take=Math.min(duration,remaining);clips.push({start:c.start,end:c.start+take});remaining-=take;
   }
  }
- const total=ranges.reduce((n,c)=>n+Math.max(0,c.end-c.start),0);
+ const total=frameCounts?frameCounts.reduce((n,v)=>n+v/30,0):ranges.reduce((n,c)=>n+Math.max(0,c.end-c.start),0);
  return {ranges:clips,frameCounts:frameCounts?frames:undefined,seconds:limit-remaining,limited:total>limit+.00001};
 }

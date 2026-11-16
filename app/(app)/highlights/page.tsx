@@ -7,8 +7,8 @@ export const metadata: Metadata = { title: "Clip Farmer" };
 export default function ClipsPage() {
   return (
     <>
-      <PageHeader eyebrow="Flipper video lab" title="Clip Farmer">
-        Find sounds, review the clips and save one highlights video. Nearby sounds stay separate, with no overlapping cuts.
+      <PageHeader eyebrow="Session editor" title="Clip Farmer">
+        Make the cut. Keep every moment you choose.
       </PageHeader>
       <Container>
         <Highlights />

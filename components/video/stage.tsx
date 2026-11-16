@@ -97,7 +97,7 @@ export function Stage({
     const Y = (y: number) => oy + y * vh;
 
     if (setup.stumps && (calibrating || (overlay && showAnalysis))) {
-      ctx.strokeStyle = "#ffc700";
+      ctx.strokeStyle = "#d5e6bd";
       ctx.lineWidth = 2;
       for (const x of [setup.stumps.leftX, setup.stumps.rightX]) {
         ctx.beginPath();
@@ -127,11 +127,11 @@ export function Stage({
     }
     ctx.setLineDash([]);
     for (const p of pts) {
-      ctx.fillStyle = "#00175f";
+      ctx.fillStyle = "#284a3a";
       ctx.beginPath();
       ctx.arc(X(p.x), Y(p.y), 3.5, 0, Math.PI * 2);
       ctx.fill();
-      ctx.strokeStyle = "#ffc700";
+      ctx.strokeStyle = "#d5e6bd";
       ctx.lineWidth = 1.5;
       ctx.stroke();
     }
@@ -154,11 +154,11 @@ export function Stage({
     }
     if (speed != null) {
       const text = `${speed.toFixed(0)} KM/H`;
-      ctx.font = "800 italic 26px var(--font-barlow-condensed), sans-serif";
+      ctx.font = "800 italic 26px Arial, sans-serif";
       const w = ctx.measureText(text).width + 24;
-      ctx.fillStyle = "#00175f";
+      ctx.fillStyle = "#284a3a";
       ctx.fillRect(ox + 12, oy + 12, w, 40);
-      ctx.fillStyle = "#ffc700";
+      ctx.fillStyle = "#d5e6bd";
       ctx.fillRect(ox + 12, oy + 12, 5, 40);
       ctx.fillStyle = "#ffffff";
       ctx.fillText(text, ox + 24, oy + 42);
@@ -313,7 +313,7 @@ function ClipBar({
 }
 
 function label(ctx: CanvasRenderingContext2D, text: string, x: number, y: number) {
-  ctx.font = "700 13px var(--font-barlow-condensed), sans-serif";
+  ctx.font = "700 13px Arial, sans-serif";
   const w = ctx.measureText(text).width + 10;
   ctx.fillStyle = "rgba(0, 10, 46, 0.85)";
   ctx.fillRect(x, y - 13, w, 18);

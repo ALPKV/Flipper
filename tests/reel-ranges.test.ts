@@ -1,8 +1,9 @@
 import {test} from "node:test";
 import assert from "node:assert/strict";
 import {reelRanges,reelPosition} from "../lib/video/reel-ranges.ts";
-test("adjacent sound cuts become one render without losing selected footage",()=>{
- assert.deepEqual(reelRanges([{start:2,end:3},{start:0,end:1},{start:1,end:2},{start:2.5,end:4}]),[{start:0,end:4}]);
+test("every overlapping, adjacent and repeated clip remains a separate export section",()=>{
+ const clips=[{start:2,end:3},{start:0,end:1},{start:1,end:2},{start:2.5,end:4},{start:2,end:3}];
+ assert.deepEqual(reelRanges(clips),clips);
 });
 test("excluded gaps remain excluded and invalid ranges do not enter exports",()=>{
  assert.deepEqual(reelRanges([{start:0,end:1},{start:3,end:5},{start:5,end:5},{start:NaN,end:6}]),[{start:0,end:1},{start:3,end:5}]);

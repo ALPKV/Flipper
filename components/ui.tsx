@@ -12,8 +12,8 @@ const tones: Record<Tone, string> = {
 };
 
 const btn = (tone: Tone, size: "sm" | "md") =>
-  `inline-flex items-center justify-center gap-2 font-display font-bold uppercase tracking-wide transition-colors disabled:opacity-50 disabled:pointer-events-none ${
-    size === "sm" ? "h-8 px-3 text-[0.8rem]" : "h-10 px-5 text-[0.95rem]"
+  `inline-flex items-center justify-center gap-2 rounded-md font-semibold tracking-normal transition-colors disabled:opacity-50 disabled:pointer-events-none ${
+    size === "sm" ? "h-8 px-3 text-xs" : "h-10 px-5 text-sm"
   } ${tones[tone]}`;
 
 export function Button({
@@ -34,7 +34,7 @@ export function ButtonLink({
   return <Link className={`${btn(tone, size)} ${className}`} {...rest} />;
 }
 
-/** Navy band at the top of each page, in the style of a match-centre header. */
+/** Compact page heading shared by the editor and status pages. */
 export function PageHeader({
   eyebrow,
   title,
@@ -47,13 +47,12 @@ export function PageHeader({
   aside?: ReactNode;
 }) {
   return (
-    <header className="relative overflow-hidden bg-navy text-white">
-      <div aria-hidden className="pointer-events-none absolute inset-0 opacity-[0.07] [background:repeating-linear-gradient(115deg,#fff_0_1px,transparent_1px_22px)]" />
-      <div className="relative mx-auto flex max-w-7xl flex-col gap-6 px-4 py-8 sm:px-6 md:flex-row md:items-end md:justify-between md:py-10">
+    <header className="border-b border-line bg-paper text-ink">
+      <div className="relative mx-auto flex max-w-7xl flex-col gap-6 px-4 py-6 sm:px-6 md:flex-row md:items-end md:justify-between md:py-7">
         <div>
-          <p className="eyebrow text-gold">{eyebrow}</p>
-          <h1 className="display mt-2 text-4xl font-extrabold sm:text-5xl">{title}</h1>
-          {children ? <div className="mt-3 max-w-2xl text-[0.98rem] text-white/75">{children}</div> : null}
+          <p className="eyebrow text-mute">{eyebrow}</p>
+          <h1 className="mt-1 text-3xl font-semibold tracking-tight sm:text-4xl">{title}</h1>
+          {children ? <div className="mt-2 max-w-2xl text-sm text-slate">{children}</div> : null}
         </div>
         {aside ? <div className="shrink-0">{aside}</div> : null}
       </div>
@@ -75,17 +74,16 @@ export function Panel({
   flush?: boolean;
 }) {
   return (
-    <section className={`border border-line bg-white ${className}`}>
+    <section className={`editor-panel ${className}`}>
       {title ? (
-        <div className="flex items-center justify-between gap-3 border-b border-line px-4 py-3">
-          <h2 className="display flex items-center gap-2 text-[1.15rem] font-bold text-navy">
-            <span aria-hidden className="inline-block h-4 w-1 bg-gold" />
+        <div className="editor-panel-header">
+          <h2>
             {title}
           </h2>
           {action}
         </div>
       ) : null}
-      <div className={flush ? "" : "p-4"}>{children}</div>
+      <div className={flush ? "" : "p-[18px]"}>{children}</div>
     </section>
   );
 }

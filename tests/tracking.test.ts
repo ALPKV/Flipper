@@ -113,7 +113,7 @@ test("balls close together each keep their own clip", () => {
   const w = clipWindows([ball(10), ball(11.5), ball(13)], 1, 2.5);
   assert.equal(w.length, 3);
   for (const { delivery, start, end } of w) assert.ok(start < delivery.t && end > delivery.t, `clip ${start}-${end} misses ${delivery.t}`);
-  for (let k = 1; k < w.length; k++) assert.ok(w[k].start >= w[k - 1].end, "clips overlap");
+  for (let k = 1; k < w.length; k++) assert.ok(w[k].start < w[k - 1].end, "nearby clips should retain overlapping footage");
   // Removing the middle one (Not a shot) gives its neighbours their full length back.
   assert.deepEqual(clipWindows([ball(10), ball(13)], 1, 2.5).map((c) => [c.start, c.end]), [[9, 11.5], [12, 14.5]]);
 });
@@ -128,7 +128,7 @@ test("sound-only mode keeps quiet and speech-like peaks inside another shot's cu
  for(let i=0;i<windows.length;i++){
   const w=windows[i];assert.ok(w.start<=w.delivery.t&&w.end>w.delivery.t);
   assert.ok(w.end>w.start);
-  if(i)assert.ok(w.start>=windows[i-1].end);
+  if(i)assert.ok(w.start<windows[i-1].end);
  }
 });
 test("dense sounds at file edges keep positive, bounded cuts without duplicates",()=>{
@@ -138,7 +138,7 @@ test("dense sounds at file edges keep positive, bounded cuts without duplicates"
  for(let i=0;i<windows.length;i++){
  const w=windows[i];assert.ok(w.start>=0&&w.end<=1&&w.start<w.end);
  assert.ok(w.start<=w.delivery.t&&w.end>w.delivery.t);
- if(i)assert.ok(w.start>=windows[i-1].end);
+ if(i)assert.ok(w.start<windows[i-1].end);
  }
 });
 
@@ -150,5 +150,27 @@ test("custom before and after timing updates windows and clamps recording edges"
  const [last]=clipWindows([{t:29,rel:0}],2,6,30);
  assert.deepEqual([last.start,last.end],[27,30]);
  const dense=clipWindows([{t:10,rel:0},{t:10.2,rel:0}],4,12,30);
- assert.equal(dense.length,2);assert.equal(dense[0].end,dense[1].start);
+ assert.equal(dense.length,2);assert.ok(dense[0].end>dense[1].start);
+ assert.ok(Math.abs(dense[0].end-dense[0].start-12)<1e-8);
+});
+
+test("positive and negative offsets retain every machine-triggered clip",()=>{
+ const sounds=[{t:5,rel:0},{t:5.15,rel:-60},{t:7,rel:-20}];
+ const original=clipWindows(sounds,1,4,20),later=clipWindows(sounds,1,4,20,1.25),earlier=clipWindows(sounds,1,4,20,-.5);
+ assert.equal(later.length,3);assert.equal(earlier.length,3);
+ for(let i=0;i<3;i++){assert.equal(later[i].start,original[i].start+1.25);assert.equal(earlier[i].start,original[i].start-.5);assert.equal(later[i].end-later[i].start,4);}
+ assert.ok(later[1].start<later[0].end);
+ for(const offset of [-50,50]){
+  const windows=clipWindows(sounds,1,4,20,offset);assert.equal(windows.length,3);
+  assert.ok(windows.every(w=>w.start>=0&&w.end<=20&&w.end>w.start));
+ }
+});
+
+test("candidates at or just past the reported recording end retain their own clips",()=>{
+ const candidates=[{t:10,rel:0},{t:10.001,rel:-20}];
+ for(const offset of [0,15,-15]){
+  const windows=clipWindows(candidates,1,4,10,offset);
+  assert.deepEqual(windows.map(w=>w.delivery),candidates);
+  assert.ok(windows.every(w=>w.start>=0&&w.end<=10&&w.end>w.start));
+ }
 });

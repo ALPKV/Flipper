@@ -6,7 +6,7 @@ import { coverage, type ScanResult } from "@/lib/tracking/visual-deliveries";
 import { type DeliveryCategory } from "@/lib/tracking/pose-actions";
 import { NORMAL_TIMING, timingFactor, type VideoTiming } from "@/lib/tracking/video-timing";
 import { clipWindows, deliveryId, type Delivery } from "@/lib/tracking/deliveries";
-import { soundEvents, selectSounds, type Sound } from "@/lib/tracking/hits";
+import { soundEvents, type Sound } from "@/lib/tracking/hits";
 import { DEFAULT_SETUP, lengthM, lineCm, speedKmh, type Setup } from "@/lib/tracking/metrics";
 import { extractAudio, releaseEngine } from "@/lib/video/ffmpeg";
 import { captureFrames } from "@/lib/video/frames";
@@ -26,6 +26,7 @@ export type ClipSettings = {
   motionSensitivity: number;
   /** After a clip, sounds within this many seconds are skipped (back-to-back noise from the same ball). */
   gap: number;
+  offset:number;
   leadIn: number;
   length: number;
 };
@@ -40,6 +41,7 @@ export type Clip = {
   level: number | null;
   kind: "bat" | "motion" | "manual";
   manual: boolean;
+  anchor?:number;
   reviewRequired?: boolean;
   category?: DeliveryCategory;
   poseConfidence?: number;
@@ -102,7 +104,7 @@ export function useVideo(): Ctx {
   return v;
 }
 
-const DEFAULT_SETTINGS: ClipSettings = { timing: NORMAL_TIMING, threshold: -120, noisy: false, visual: false, motionSensitivity: .012, gap: 3, leadIn: 1.5, length: 5 };
+const DEFAULT_SETTINGS: ClipSettings = { timing: NORMAL_TIMING, threshold: -120, noisy: false, visual: false, motionSensitivity: .012, gap: 3, offset:0, leadIn: 1.5, length: 5 };
 const DEFAULT_TRACKING: TrackingSetup = { ...DEFAULT_SETUP, stumps: null };
 
 const emptyMarks = (): Marks => ({
@@ -276,13 +278,13 @@ export function VideoProvider({ children }: { children: React.ReactNode }) {
   },[settings.timing]);
 
   const deliveries = useMemo<Delivery[]>(() => {
-    return sounds ? soundEvents(settings.noisy ? selectSounds(sounds,true) : sounds).filter(d=>settings.threshold<=-120||d.rel>=settings.threshold) : [];
-  }, [sounds,settings.threshold,settings.noisy]);
+    return sounds ? soundEvents(sounds) : [];
+  }, [sounds]);
 
   const clips: Clip[] = useMemo(() => {
     const duration = meta?.duration ?? Infinity;
     const kept = deliveries.filter((d) => !removed.has(deliveryId(d)));
-    const auto: Clip[] = clipWindows(kept, settings.leadIn*(timingFactor(settings.timing)??1), settings.length*(timingFactor(settings.timing)??1), duration).map(({ delivery: d, start, end }) => ({
+    const auto: Clip[] = clipWindows(kept, settings.leadIn*(timingFactor(settings.timing)??1), settings.length*(timingFactor(settings.timing)??1), duration,settings.offset).map(({ delivery: d, start, end }) => ({
       id: deliveryId(d),
       reviewRequired: false,
       category:d.category,poseConfidence:d.poseConfidence,
@@ -293,8 +295,13 @@ export function VideoProvider({ children }: { children: React.ReactNode }) {
       kind: d.kind === "motion" ? "motion" : "bat",
       manual: false,
     }));
-    return [...auto, ...manual].sort((a, b) => a.start - b.start);
-  }, [deliveries, manual, removed, settings.leadIn, settings.length, settings.timing, meta]);
+    const adjustedManual=manual.map(c=>{
+      const anchor=Math.min(c.anchor??c.start+settings.leadIn,duration-.000001);
+      const w=clipWindows([{t:anchor,rel:0}],settings.leadIn,settings.length,duration,settings.offset)[0];
+      return w?{...c,start:w.start,end:w.end}:c;
+    });
+    return [...auto, ...adjustedManual].sort((a, b) => a.start - b.start);
+  }, [deliveries, manual, removed, settings.leadIn, settings.length, settings.timing, settings.offset, meta]);
 
   const addManualClip = useCallback(
     (time: number) => {
@@ -308,6 +315,7 @@ export function VideoProvider({ children }: { children: React.ReactNode }) {
         level: null,
         kind: "manual",
         manual: true,
+        anchor:time,
       };
       setManual((m) => (m.some((c) => c.id === clip.id) ? m : [...m, clip]));
       return clip;
