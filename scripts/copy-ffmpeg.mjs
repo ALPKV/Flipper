@@ -6,3 +6,7 @@ mkdirSync("public/vendor/ffmpeg", { recursive: true });
 cpSync("node_modules/@ffmpeg/ffmpeg/dist/esm", "public/vendor/ffmpeg", { recursive: true });
 mkdirSync("public/vendor/mediapipe", { recursive: true });
 cpSync("node_modules/@mediapipe/tasks-vision/wasm", "public/vendor/mediapipe", { recursive: true });
+
+// Pinned local core: no third-party runtime request and no recordings in this directory.
+mkdirSync("public/vendor/ffmpeg-core/0.12.10", { recursive: true });
+cpSync("node_modules/@ffmpeg/core/dist/esm", "public/vendor/ffmpeg-core/0.12.10", { recursive: true });

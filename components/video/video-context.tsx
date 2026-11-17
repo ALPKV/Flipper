@@ -1,6 +1,8 @@
 "use client";
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
+import {EXPERIMENTAL_FEATURES} from "@/lib/features";
+import {validateRecording,RecordingInputError,NO_AUDIO_MESSAGE,PLAYBACK_MESSAGE} from "@/lib/video/input-policy";
 import {groupImpacts} from "@/lib/video/impact-groups";
 import {recordingMetadata} from "@/lib/video/recording-metadata";
 import type { BallAnalysis } from "@/lib/tracking/analyze";
@@ -74,6 +76,9 @@ type Ctx = {
   loadFile: (f: File) => void;
   clearFile: () => void;
   audio: AudioState;
+  loadError:string|null;
+  previewError:string|null;
+  reportPlaybackError:()=>void;
   deliveryScan: DeliveryScan;
   scanVideo: () => Promise<void>;
   cancelScan: () => void;
@@ -130,6 +135,9 @@ export function VideoProvider({ children }: { children: React.ReactNode }) {
   const [url, setUrl] = useState<string | null>(null);
   const [meta, setMeta] = useState<Ctx["meta"]>(null);
   const [audio, setAudio] = useState<AudioState>({ status: "idle", progress: 0, error: null });
+  const [loadError,setLoadError]=useState<string|null>(null);
+  const [previewError,setPreviewError]=useState<string|null>(null);
+  const reportPlaybackError=useCallback(()=>setPreviewError(PLAYBACK_MESSAGE),[]);
   const [sounds, setSounds] = useState<Sound[] | null>(null);
   const [fps, setFps] = useState<number | null>(null);
   const [settings, setSettingsState] = useState<ClipSettings>(DEFAULT_SETTINGS);
@@ -148,6 +156,12 @@ export function VideoProvider({ children }: { children: React.ReactNode }) {
   const [deliveryScan, setDeliveryScan] = useState<DeliveryScan>(EMPTY_SCAN);
 
   useEffect(() => setSetupState(loadSetup()), []);
+  useEffect(()=>{
+    if(!file)return;
+    const warn=(event:BeforeUnloadEvent)=>{event.preventDefault();event.returnValue="";};
+    window.addEventListener("beforeunload",warn);
+    return ()=>window.removeEventListener("beforeunload",warn);
+  },[file]);
   useEffect(() => () => { scanner.current?.terminate(); audioAbort.current?.abort(); scanController.current?.abort(); releaseEngine(); }, []);
 
   const setSetup = useCallback((s: TrackingSetup) => {
@@ -171,6 +185,7 @@ export function VideoProvider({ children }: { children: React.ReactNode }) {
       return null;
     });
     setMeta(null);
+    setLoadError(null);setPreviewError(null);
     setSounds(null);
     setFps(null);
     setAudio({ status: "idle", progress: 0, error: null });
@@ -184,6 +199,7 @@ export function VideoProvider({ children }: { children: React.ReactNode }) {
 
   const loadFile = useCallback(
     (f: File) => {
+      try{validateRecording(f.size);}catch(err){setLoadError((err as Error).message);return;}
       clearFile();
       const token = ++loadToken.current;
       const u = URL.createObjectURL(f);
@@ -191,6 +207,7 @@ export function VideoProvider({ children }: { children: React.ReactNode }) {
       setUrl(u);
       const probe = document.createElement("video");
       probe.preload = "metadata";
+      probe.onerror=()=>{if(token===loadToken.current)setPreviewError(PLAYBACK_MESSAGE);probe.removeAttribute("src");};
       probe.src = u;
       probe.onloadedmetadata = () => {
         if (token === loadToken.current) {
@@ -205,12 +222,21 @@ export function VideoProvider({ children }: { children: React.ReactNode }) {
       // deliveries is kept; the audio itself is dropped as soon as it has been analysed.
       const audioController = new AbortController();
       audioAbort.current = audioController;
-      import("@/lib/video/native-decode").then(async ({ nativeAudio }) => {
+      import("@/lib/video/native-decode").then(async ({ nativeAudio,inspectRecording }) => {
+        let info;
+        try{info=await inspectRecording(f,audioController.signal);}
+        catch(err){
+          if(err instanceof RecordingInputError||audioController.signal.aborted)throw err;
+          throw new RecordingInputError("video","Could not read this recording. Re-save it as H.264 MP4 on your device and try again.");
+        }
+        if(token!==loadToken.current)throw new DOMException("Canceled","AbortError");
+        setMeta(current=>recordingMetadata(current,info));
+        if(!info.hasAudio)throw new RecordingInputError("no-audio",NO_AUDIO_MESSAGE);
         try {
           const res = await nativeAudio(f, audioController.signal, (p) => progress(p * .6));
           return { ...res, fps: null as number | null };
         } catch (err) {
-          if (audioController.signal.aborted) throw err;
+          if (audioController.signal.aborted||err instanceof RecordingInputError) throw err;
           return extractAudio(f, (p) => progress(p * .6));
         }
       })
@@ -238,7 +264,7 @@ export function VideoProvider({ children }: { children: React.ReactNode }) {
         .catch((err: Error) => {
           if (token !== loadToken.current) return;
           setAudio({
-            status: /no readable audio/.test(err.message) ? "none" : "error",
+            status: err instanceof RecordingInputError&&err.code==="no-audio"||/no readable audio/i.test(err.message) ? "none" : "error",
             progress: 0,
             error: err.message || "Could not read the audio.",
           });
@@ -248,7 +274,7 @@ export function VideoProvider({ children }: { children: React.ReactNode }) {
   );
 
   const scanVideo = useCallback(async () => {
-    if (!url || !file) return;
+    if (!EXPERIMENTAL_FEATURES || !url || !file) return;
     scanController.current?.abort();
     const controller = new AbortController();
     scanController.current = controller;
@@ -344,6 +370,7 @@ export function VideoProvider({ children }: { children: React.ReactNode }) {
 
   const analyze = useCallback(
     async (clip: Clip) => {
+      if(!EXPERIMENTAL_FEATURES)return;
       if (!url) return;
       if (analyses[clip.id]?.status === "running") return;
       const token = loadToken.current;
@@ -395,7 +422,7 @@ export function VideoProvider({ children }: { children: React.ReactNode }) {
     const p = playerRef.current;
     if (!p) return;
     p.currentTime = Math.max(0, t);
-    if (play) void p.play();
+    if (play) void p.play().catch((err)=>setPreviewError(err?.name==="NotSupportedError"||p.error?PLAYBACK_MESSAGE:"Playback could not start automatically. Press Play in the original recording controls."));
     else p.pause();
   }, []);
   const playhead = useCallback(() => playerRef.current?.currentTime ?? 0, []);
@@ -407,6 +434,7 @@ export function VideoProvider({ children }: { children: React.ReactNode }) {
     loadFile,
     clearFile,
     audio,
+    loadError,previewError,reportPlaybackError,
     deliveryScan,
     scanVideo,
     cancelScan,

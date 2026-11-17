@@ -1,11 +1,26 @@
 "use client";
 
 import { Input, ALL_FORMATS, BlobSource, CanvasSink, AudioBufferSink, EncodedPacketSink } from "mediabunny";
+import {validateRecording,RecordingInputError,NO_AUDIO_MESSAGE} from "./input-policy";
 import { toGray, type Gray } from "../tracking/core";
 import { coverage, motionFraction, type ScanResult } from "../tracking/visual-deliveries";
 
 const open = (file: File) => new Input({ formats: ALL_FORMATS, source: new BlobSource(file) });
 const check = (signal?: AbortSignal) => { if (signal?.aborted) throw new DOMException("Canceled", "AbortError"); };
+
+/** Container metadata is checked before allocating PCM or starting a video render. */
+export async function inspectRecording(file:File,signal:AbortSignal){
+ const input=open(file),abort=()=>input.dispose();
+ signal.addEventListener("abort",abort,{once:true});
+ try{
+  check(signal);
+  const duration=await input.computeDuration();
+  validateRecording(file.size,duration);
+  const video=await input.getPrimaryVideoTrack();
+  if(!video)throw new RecordingInputError("video","No readable video track was found. Re-save the recording as H.264 MP4 and try again.");
+  return {duration,width:await video.getDisplayWidth(),height:await video.getDisplayHeight(),hasAudio:!!await input.getPrimaryAudioTrack()};
+ }finally{signal.removeEventListener("abort",abort);input.dispose();}
+}
 
 /** Frame stepping reads the file's actual PTS values, including variable-frame-rate video. */
 export async function frameTimeline(file: File, signal: AbortSignal, maxSeconds = 15) {
@@ -102,7 +117,8 @@ export async function nativeAudio(file: File, signal: AbortSignal, progress: (p:
     if (!Number.isFinite(duration) || duration <= 0) throw new Error("The recording has no usable duration.");
     if (duration > maxSeconds) throw new Error(`Use a recording no longer than ${maxSeconds} seconds for this tool.`);
     const track = await input.getPrimaryAudioTrack();
-    if (!track || !await track.canDecode()) throw new Error("No supported audio track.");
+    if (!track) throw new RecordingInputError("no-audio",NO_AUDIO_MESSAGE);
+    if (!await track.canDecode()) throw new Error("No supported audio decoder.");
     const pcm = new Int16Array(Math.ceil(duration * sampleRate));
     const sink = new AudioBufferSink(track);
     let seen = false;

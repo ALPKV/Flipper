@@ -1,11 +1,12 @@
 "use client";
 
 import { useRef, useState } from "react";
+import {INPUT_GUIDANCE} from "@/lib/video/input-policy";
 import { Button } from "../ui";
 import { useVideo } from "./video-context";
 
 export function VideoDrop() {
-  const { loadFile } = useVideo();
+  const { loadFile,loadError } = useVideo();
   const input = useRef<HTMLInputElement>(null);
   const [over, setOver] = useState(false);
 
@@ -40,6 +41,8 @@ export function VideoDrop() {
           MP4 or MOV from your phone. It stays on this device. Nothing is uploaded.
         </p>
       </div>
+      {loadError?<p role="alert" className="max-w-lg text-sm text-risk">{loadError}</p>:null}
+      <details className="max-w-lg text-xs text-mute"><summary>Recording limits and compatibility</summary><p className="mt-2">{INPUT_GUIDANCE}</p><p className="mt-2">Use H.264 MP4 for the widest compatibility. Browser smoke-tested with a 3.2-second 1080p H.264 clip; maximum long-session capacity has not been benchmarked. Synthetic export checks are documented in the README.</p></details>
       <Button tone="navy" onClick={() => input.current?.click()}>Choose video</Button>
       <input
         ref={input}
@@ -55,7 +58,7 @@ export function VideoDrop() {
   );
 }
 
-export function FileBar() {
+export function FileBar({disabled=false}:{disabled?:boolean}) {
   const { file, meta, clearFile, audio } = useVideo();
   if (!file) return null;
   const mb = file.size / (1024 * 1024);
@@ -82,7 +85,7 @@ export function FileBar() {
                   : "—"
         }
       />
-      <button onClick={clearFile} className="ml-auto text-xs font-semibold text-navy underline-offset-4 hover:underline">
+      <button disabled={disabled} onClick={clearFile} className="ml-auto text-xs font-semibold text-navy underline-offset-4 hover:underline">
         Change video
       </button>
     </div>

@@ -4,12 +4,12 @@ export type ExportPlan = { precise: boolean; estimatedBytes: number; fits: boole
 /** One video, not an automatic sequence of downloads. Conservative estimates, not guarantees. */
 export function planExport(fileSize: number, duration: number, seconds: number, count: number,
   quality: ExportQuality, touch: boolean): ExportPlan {
-  const original = fileSize / Math.max(1, duration) * (seconds + count);
+  void fileSize;void duration;void quality;
   // Compact mode is bounded to 1.5 Mbit/s video + 96 Kbit/s audio, plus mux overhead.
   const compact = seconds * 210_000 + count * 4096;
   const limit = touch ? 90e6 : 240e6;
-  const precise = quality === "compact" || (quality === "auto" && original > limit);
-  const estimatedBytes = precise ? compact : original;
+  const precise = true;
+  const estimatedBytes = compact;
   return { precise, estimatedBytes, fits: estimatedBytes <= limit,
-    reason: precise ? "Smaller 720p video · exact cuts · takes longer to encode" : "Original quality · fast cuts near keyframes" };
+    reason: "720p video / exact 30 fps cuts" };
 }

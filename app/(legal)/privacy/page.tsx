@@ -7,8 +7,8 @@ export const metadata: Metadata = { title: "Privacy Policy" };
 export default function PrivacyPage() {
   return (
     <article>
-      <LegalTitle title="Privacy Policy" updated="3 November 2026">
-        Flipper is a free, non-commercial app that turns a net session video into clips and tracks the ball. The
+      <LegalTitle title="Privacy Policy" updated="17 November 2026">
+        Flipper is a free, non-commercial app that turns a net session video into highlight clips. The
         short version: there are no accounts, and your videos never leave your device.
       </LegalTitle>
 
@@ -38,10 +38,7 @@ export default function PrivacyPage() {
       <Section title="Services Flipper relies on">
         <ul>
           <li><b>Vercel</b> hosts the website. Like any web host, it handles your IP address and basic request details to serve pages.</li>
-          <li>
-            <b>jsDelivr</b> serves the video engine (FFmpeg), which your browser downloads once the first time you open a
-            video. It sees an ordinary download request, not your video.
-          </li>
+          <li>The video-processing engine is served by this website and processes recordings locally.</li>
         </ul>
       </Section>
 

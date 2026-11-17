@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import {EXPERIMENTAL_FEATURES} from "@/lib/features";
 import { clipMetrics, useVideo, type Clip } from "./video-context";
 
 /**
@@ -11,14 +12,15 @@ export function Stage({
   clip,
   calibrating,
   onCalibrate,
-  showAnalysis = true,
+  showAnalysis: requestedAnalysis = true,
 }: {
   clip: Clip | null;
   calibrating?: boolean;
   onCalibrate?: (x: number) => void;
   showAnalysis?: boolean;
 }) {
-  const { url, meta, playerRef, overlay, setOverlay, analyses, marks, setup, clips, select } = useVideo();
+  const showAnalysis=EXPERIMENTAL_FEATURES&&requestedAnalysis;
+  const { reportPlaybackError,url, meta, playerRef, overlay, setOverlay, analyses, marks, setup, clips, select } = useVideo();
   // Set when playback starts at a clip's start (Play clip, or Play in the list): stop at its end.
   // Playing the whole video from anywhere else just keeps going.
   const stopAt = useRef<number | null>(null);
@@ -213,7 +215,8 @@ export function Stage({
           className="absolute inset-0 h-full w-full object-contain"
           controls={!calibrating}
           playsInline
-          preload="auto"
+          preload="metadata"
+          onError={reportPlaybackError}
         />
         <canvas ref={canvasRef} className="pointer-events-none absolute inset-0 h-full w-full" />
         {calibrating ? (

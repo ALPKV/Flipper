@@ -1,4 +1,5 @@
 "use client";
+import {EXPERIMENTAL_FEATURES} from "@/lib/features";
 
 import { useEffect, useState } from "react";
 import { CREASE_TO_CREASE_M, PITCH_M, lengthZone } from "@/lib/tracking/metrics";
@@ -14,7 +15,9 @@ const MARKS: { key: MarkKey; label: string; help: string }[] = [
   { key: "contact", label: "Contact", help: "Bat on ball. Auto-filled from the loudest sound; check it's the bat." },
 ];
 
-export function BallTracking() {
+export function BallTracking(){return EXPERIMENTAL_FEATURES?<ExperimentalBallTracking/>:null;}
+
+function ExperimentalBallTracking() {
   const v = useVideo();
   const [calibrating, setCalibrating] = useState<number[] | null>(null);
 

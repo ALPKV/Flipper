@@ -1,4 +1,5 @@
 "use client";
+import {EXPERIMENTAL_FEATURES} from "@/lib/features";
 
 import { useEffect, useRef, useState } from "react";
 import { Button, Meter, Panel } from "../ui";
@@ -9,7 +10,9 @@ import { PITCH_M, CREASE_M, CREASE_TO_CREASE_M } from "@/lib/tracking/metrics";
 
 type Evidence = { release: number | null; contact: number | null; visualContact: boolean; frameSeconds: number; points: number; timestamps: number[]; note: string; releaseUncertainty?: number; releaseSource?: "pose"|"ball"|"manual" };
 
-export function SpeedCheck() {
+export function SpeedCheck(){return EXPERIMENTAL_FEATURES?<ExperimentalSpeedCheck/>:null;}
+
+function ExperimentalSpeedCheck() {
   const [file, setFile] = useState<File | null>(null);
   const [url, setUrl] = useState<string | null>(null);
   const [status, setStatus] = useState("");
@@ -53,7 +56,7 @@ export function SpeedCheck() {
       if(poseRelease)setEvidence(old=>old?{...old,release:poseRelease.t,releaseSource:"pose",releaseUncertainty:poseRelease.uncertainty,
         note:"Pose tracking found an arm-whip release candidate. Check the actual ball leaving the hand; pose is not a direct ball-release measurement."}:old);
       const audio = await nativeAudio(source, controller.signal, p => setProgress(.35+p*.15), 15*factor);
-      if (audio.duration > 15*factor) throw new Error("Upload one delivery, up to 15 seconds. Use Clip Farmer for a full session.");
+      if (audio.duration > 15*factor) throw new Error("Upload one delivery, up to 15 seconds. Use Flipper for a full session.");
       setStatus("Finding bat contact");
       const impacts = (await findImpacts(audio.pcm, audio.sampleRate)).filter(e => e.riseDb > 10)
         .map(e => ({ ...e, t: refineContact(audio.pcm, audio.sampleRate, e.t) }));

@@ -17,6 +17,7 @@ const source=ts.transpileModule(readFileSync(new URL("../lib/video/ffmpeg.ts",im
 
 function harness(options:{autoLoad?:boolean;exec?:(args:string[],worker:number,log:(message:string)=>void)=>number|Promise<number>}={}){
  const workers:FakeWorker[]=[];
+ const requests:string[]=[];
  class FakeWorker{
   commands:string[][]=[];
   writes:{path:string;data:unknown}[]=[];
@@ -42,10 +43,10 @@ function harness(options:{autoLoad?:boolean;exec?:(args:string[],worker:number,l
  runInNewContext(source,{
   exports:api,
   require:(id:string)=>id==="./reel-ranges"?{reelRanges}:{FFmpeg:FakeWorker},
-  fetch:async()=>new Response(new Uint8Array([0])),
+  fetch:async(url:string)=>{requests.push(url);return new Response(new Uint8Array([0]));},
   URL,Blob,Response,DOMException,AbortController,Error,Uint8Array,Int16Array,setTimeout,clearTimeout,
  });
- return {api,workers};
+ return {api,workers,requests};
 }
 const file={name:"recording.mp4"} as File;
 
@@ -74,11 +75,14 @@ test("old canceled cleanup cannot block or terminate a replacement export",async
  const canceled=assert.rejects(first,{name:"AbortError"});
  await tick();api.releaseEngine();
  const second=api.exportClip(file,1,1);
- await tick();assert.equal(workers.length,2);workers[1].loadGate.resolve(true);
- assert.equal((await second).size,3);
+ await tick();assert.equal(workers.length,2);
+ workers[1].execGate=deferred<number>();workers[1].loadGate.resolve(true);
+ await tick();
  workers[0].unmountGate.resolve();await canceled;
- assert.equal(workers[1].terminated,false);
- await api.prepareExport();assert.equal(workers.length,2);
+ assert.equal(workers[1].terminated,false,"old cleanup cannot stop the active replacement");
+ workers[1].execGate.resolve(0);
+ assert.equal((await second).size,3);
+ assert.equal(workers[1].terminated,true,"completed export releases its own worker");
  api.releaseEngine();
 });
 
@@ -112,7 +116,7 @@ test("a memory retry keeps every overlapping candidate and its exact beat slot",
  assert.equal(result.size,3);
  const commands=workers.flatMap(w=>w.commands),cuts=commands.filter(c=>c.includes("-ss"));
  assert.deepEqual(cuts.map(c=>Number(c[c.indexOf("-ss")+1])),[2,2.1,2,2.1,4]);
- assert.deepEqual(cuts.slice(2).map(c=>Number(c[c.indexOf("-frames:v")+1])),frameCounts);
+ assert.deepEqual(cuts.slice(2).map(c=>Math.round(Number(c[c.indexOf("-t")+1])*30)),frameCounts);
  assert.ok(cuts.slice(2).every(c=>c[c.indexOf("-vf")+1].includes("min(480,ih)")));
  assert.ok(workers.every(w=>w.terminated),"each failed or completed batch must release its worker");
  const joinWorker=workers.find(w=>w.commands.some(c=>c.includes("concat")))!;
@@ -177,4 +181,11 @@ test("a persistent allocation failure gets only one smaller retry",async()=>{
  await assert.rejects(api.exportReel(file,[{start:0,end:1}],undefined,{precise:true}));
  assert.equal(workers.length,2);
  assert.ok(workers.every(w=>w.terminated));
+});
+
+test("the pinned video core is fetched only from this site's own assets",async()=>{
+ const {api,requests}=harness({autoLoad:true});
+ await api.prepareExport();
+ assert.deepEqual(requests.sort(),["/vendor/ffmpeg-core/0.12.10/ffmpeg-core.js","/vendor/ffmpeg-core/0.12.10/ffmpeg-core.wasm"]);
+ api.releaseEngine();
 });

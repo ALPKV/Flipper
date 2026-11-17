@@ -14,8 +14,8 @@ export default function TermsPage() {
 
       <Section title="The service">
         <p>
-          Flipper is a free, non-commercial app that cuts a clip for every shot in a net session video and tracks the
-          ball. It is a personal project, offered as is. Features may change, and the service may be paused or shut
+          Flipper is a free, non-commercial app that creates sound-triggered clips from a net session video. Speed and ball-tracking tools are experimental and currently unavailable on the public site.
+          It is a personal project, offered as is. Features may change, and the service may be paused or shut
           down. Save your own copies of any clips that matter to you.
         </p>
       </Section>

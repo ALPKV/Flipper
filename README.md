@@ -1,212 +1,102 @@
 # Flipper
 
-Drop in an unedited net session video and get a clip for every shot, then track the ball. It grew
-out of Clip Farmer, an audio-based auto-clipper (the original Streamlit version is in `legacy/`).
+**Live:** https://flipper-cricket.vercel.app/highlights
 
-**Live:** https://flipper-cricket.vercel.app
+Flipper turns cricket net-session recordings into reviewable sound-triggered highlights. The
+navigation calls the editor **Clip Farmer**; the page heading and browser title are **Flipper**.
+Recordings, decoded audio and generated clips stay on your device. There are no active accounts,
+upload endpoints or cloud video processing.
 
-| Tab | What it does |
-| --- | --- |
-| **Clip Farmer** | Choose a video, review audio-detected clips, and export one highlights MP4. Optional Noisy hall filtering reduces false clips at the cost of softer shots. Exclusions are reversible. Tracking is off by default. |
-| **Ball Tracking** | Follows the ball through a clip and draws it over the video (toggle on and off). Times speed and length from release, bounce and contact marks. Pitch map of the deliveries tracked in the session. |
+## Current workflow
 
-Everything runs on your device: there are no accounts, no database and no uploads (FFmpeg compiled to
-WebAssembly, plus a tracker written for this app).
+1. Choose an MP4, MOV or other supported recording. H.264 MP4 has the widest browser compatibility.
+2. Review sound candidates. They can include machine noise, speech, footsteps or net noise; this
+   is not a validated bat-contact classifier and does not guarantee every delivery.
+3. Nearby detections can be combined around the strongest sound (default 0.6 seconds). The gap
+   is adjustable and switching grouping off restores raw detections. Manual clips stay separate.
+4. Adjust equal time either side of the sound and the timing offset. Separate clips may overlap.
+5. **Keep 1st, 3rd, 5th...** selects alternate entries from the full chronological clip list.
+   It is repeatable without further halving the selection; **Select all** restores every entry.
+6. Optionally enter a song's BPM and one hit every 1, 2, 4 or 8 beats. No song upload is needed.
+   Add music later in a reel editor and align its beat with the first output hit time shown.
+7. Prepare a local 480p preview (first 90 seconds only), then create and explicitly save one
+   720p MP4. Full export selection is independent of the preview cap.
 
-## How shots are found
+Exports re-encode exact 30 fps cuts. The old keyframe-copy option was removed after a synthetic
+regression showed cuts starting 21-39 frames early. Intermediate clips use lossless ALAC audio in MOV;
+AAC is encoded once at final assembly to avoid accumulating encoder delay. Video-only concat
+copying is safe here because those intermediates have matching codec, dimensions and timebase.
+Memory-bounded worker batches and one smaller 480p retry remain; these cannot remove a device's
+hard memory limit. Progress and Cancel are available. Controls are locked while processing;
+an immediate guard prevents a repeated Export invocation from queuing another job.
 
-`lib/tracking/hits.ts`: sudden jumps in the 1.5–7.5 kHz band against the last 3 s of background (so
-it works in a quiet net or a loud hall), talking dropped (a vowel follows a spoken "t" or "k"), then
-the simple rule above. Results on labelled sessions are in `scripts/deliveries/README.md`.
+## Limits and compatibility
 
-## How speed is measured (and how accurate it is)
+- Safety caps: **1 GiB input** and **2 hours**. Size is checked before opening a recording;
+  container duration is checked before PCM allocation. These caps are safeguards, not proven
+  capacity on all devices. Trim longer/larger files or re-save them at 1080p/720p locally.
+- Actual prior browser smoke test: **3.2-second 1080x1920 H.264 MP4**. Maximum long-session
+  capacity has not been benchmarked. No phone/browser hardware matrix is claimed.
+- Native synthetic export check: **9-second 320x180 H.264**, 30 fps, 2-second GOP, numbered
+  frames and synchronized beeps. See `RELIABILITY-CHECKS.md` for before/after measurements.
+- Phone HEVC/MOV playback depends on browser codec support. Unsupported original playback
+  shows a message and offers the local H.264 preview path; if export also cannot decode the
+  source, convert it to H.264 MP4 on your device. No footage is uploaded for conversion.
+- Container display dimensions include rotation. Exact exports let FFmpeg apply rotation and
+  convert variable frame rate to 30 fps; duration comes from presentation timestamps.
+- Recordings without audio show a specific message. They remain usable for manually added clips.
+- The browser warns before closing/reloading a loaded session, where supported. It cannot
+  guarantee recovery after a crash, forced shutdown or mobile app termination. Save your MP4.
 
-Speed is an **unvalidated timing estimate**, not radar: the calculation assumes a distance (17.68 m, crease to crease, by default) between release and contact. That assumed distance is not a measured 3D ball path. Contact comes from an audio impact, which may be a bat, net, or another sound and can include sound-travel delay. Release comes from the first frame the ball is seen, which is not necessarily the true release. **Check every auto mark** with
-the frame-step buttons; one frame at 30 fps is about 5% of the speed. Film at 60 fps or more, on a
-tripod, with the release and the batter both in view. Length assumes the ball keeps that speed to the
-bounce. Line needs the camera behind the stumps and the stumps marked. All are estimates, not radar.
+## Experimental tools retained in the repo
 
-## Run it on your computer
+`lib/features.ts` contains the single `EXPERIMENTAL_FEATURES = false` switch. Speed Check shows
+an **In progress** page in production. The retained Speed Check/Ball Tracking components and
+provider tracking entry points are gated by that switch; no tracking code was deleted. Tracking
+and speed remain unvalidated timing estimates, not radar or calibrated 3D measurements.
 
-Needs Node.js 22 or newer.
+No WillowFlow-specific code is present in this checkout. The old Python account/login code is
+retained in `legacy/`, excluded from deployment by `.vercelignore`, and has no Next.js route or
+import. Old `/login`, `/signup`, `/dashboard` and `/profile` URLs redirect to `/highlights`.
+Earlier public commits contained Streamlit credentials: do not reuse those passwords.
+
+## Run and verify
+
+Node.js 22 or newer:
 
 ```bash
-npm install
+npm ci
 npm run dev
+npm test
+npm run typecheck
+npm run lint
+npm run build
 ```
 
-Open http://localhost:3000.
+The optional native command integration test requires a local FFmpeg executable:
 
 ```bash
-npm test          # unit tests (shot finding, tracking, speed maths)
-npm run lint
-npm run typecheck
+npm run test:export-native -- /absolute/path/to/ffmpeg
+# Same tests through the actual pinned WASM engine (in Node):
+npm run test:export-native -- /absolute/path/to/ffmpeg --wasm
 ```
 
-## Put it online for free
+It generates synthetic fixtures under ignored `.scratch/`, runs the application's actual cut
+and concat commands, and asserts crop/frame order, absence of black/frozen frames, total frame
+count, audio/video duration and beep alignment within one 30 fps frame. The --wasm mode runs the identical WASM binary in Node. Neither mode validates browser UI or device memory limits. No private recordings are part of the build or test artifacts.
 
-On [vercel.com](https://vercel.com) (free Hobby plan): **Add New → Project**, import **Flipper**,
-**Deploy**. Every push to `main` redeploys. Nothing else to set up.
+## Assets and deployment
 
-## Project layout
+Build/dev copies the pinned `@ffmpeg/ffmpeg` wrapper and **`@ffmpeg/core@0.12.10`** into
+`public/vendor/`. The JavaScript core and roughly 31 MB WASM asset are served by this same site;
+there is no jsDelivr runtime request. Browser caching stores engine assets, never recordings.
+`package-lock.json` pins the package tarball integrity. See `THIRD-PARTY-NOTICES.md` for licenses
+and source locations. Assets are generated, ignored by Git, and included in the deployed build.
 
-| Path | What it is |
-| --- | --- |
-| `app/` | Pages: `(app)/highlights`, `(app)/tracking`, `(legal)/privacy`, `(legal)/terms` |
-| `components/video/` | Highlights, Ball Tracking, the player and clip bar |
-| `lib/tracking/` | Shot finding from sound, ball detection and tracking, bounce, speed/length/line maths |
-| `lib/video/` | FFmpeg.wasm (audio, clips and highlights video) and frame capture |
-| `scripts/` | Evaluation of shot finding and ball-model training |
-| `legacy/` | The original Streamlit version (then called Clip Farmer), kept for reference |
-
-`config.yaml` (old Streamlit logins) is no longer tracked, but earlier commits of this public
-repository still contain it. Don't reuse those passwords anywhere.
-
-## Simplified workflow (24 October 2026)
-
-- Audio features run in a dedicated worker so the page remains responsive. Changing detection settings reuses those features.
-- No automatic multipart exports or downloads. Recommended quality copies small reels; larger ones use bounded-bitrate 720p encoding. Encoding takes longer.
-- One explicit Save downloads one MP4. Save to Photos/gallery is a separate action.
-- Selections that exceed a conservative device budget are blocked with an explanation; memory budgets are estimates, not guarantees.
-- The FFmpeg core is explicitly cached where browser storage permits, even when its worker is restarted.
-- Track association uses presentation-time differences; stalled frame capture is cleaned up and times out instead of hanging.
-- Original-quality cuts can start at earlier keyframes and have variable-frame-rate boundary artifacts. Use Smaller 720p for exact cuts.
-- No new ball model was trained in this change. Ball tracking and speed/length remain experimental and unvalidated against radar or calibrated bounce coordinates.
-
-See `FIX-VALIDATION.md` for measured checks and remaining limits.
-
-
-## Pose-first delivery analysis (3 November 2026)
-
-Clip Farmer now samples body landmarks with MediaPipe Pose Landmarker Lite in a browser worker.
-A same-person arm lift, whip and drop, or a cropped forward follow-through, creates an action candidate.
-Audio only categorizes those candidates: contact-like sound, no clear contact, or ambiguous sound.
-Audio cannot create a delivery in pose-first mode, including while the pose scan is pending.
-The explicitly selected sound-only mode remains a manual-review fallback.
-
-Speed Check combines arm-whip release candidates, ball flight/bounce and acoustic contact timing.
-A cropped follow-through never supplies release time. Missing flight evidence withholds an automatic speed.
-Speed is average distance/time, not radar release speed. Pose timing can precede actual ball release.
-Known constant slow motion requires capture/export FPS; unknown or variable-speed edits withhold speed.
-
-This is experimental, not a trained cricket-action classifier. Development recordings exposed missed
-releases, identity fragmentation and other players' arm movements mistaken for bowling. Zero false
-positives and complete delivery coverage have NOT been achieved. Local browser smoke testing found
-one pose-defined, sound-matched candidate in a 3.2-second excerpt; this is not accuracy validation.
-
-### Model provenance
-
-`@mediapipe/tasks-vision` is pinned to 1.2.0. Build/dev copies its runtime into `/vendor/mediapipe`.
-`public/models/pose_landmarker_lite.task` is the official Google MediaPipe float16 version 1 asset:
+MediaPipe runtime and the model remain local and gated with experimental tools. The retained
+pose model is Google's float16 version 1 `pose_landmarker_lite.task`:
 https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/1/pose_landmarker_lite.task
 SHA256: `59929e1d1ee95287735ddd833b19cf4ac46d29bc7afddbbf6753c459690d574a`.
-See Google's model documentation and applicable license:
-https://ai.google.dev/edge/mediapipe/solutions/vision/pose_landmarker
-Neither videos nor body landmarks are uploaded. No GPU/cloud account is required.
 
-
-## Sound-only Clip Farmer (10 November 2026)
-
-The active clipper now uses all detected audio onsets directly: no pose scan, speech rejection,
-relative-loudness filter or three-second shot cooldown. The onset detector still separates peaks
-by 120 ms; continuous sound does not become a clip for every sample. Each distinct onset becomes
-an initially selected review candidate. Adjacent cuts meet at their sound timestamps' midpoint,
-so a sound inside another cut is retained without overlapping video. Speech, footsteps and net
-noise may be included: review before exporting. One MP4 export and no duration quota remain.
-Speed Check stays in the navigation with an In progress page; measurements are unavailable.
-
-
-## Restored clip controls (15 November 2026)
-
-Before/after sound timing, sound presets/custom sensitivity, optional Noisy hall filtering,
-select all/none, undo exclusion, add at playhead, individual clip export, export quality and
-supported browser gallery sharing are available again. All sounds remains the default and
-there is no shot cooldown. Adjacent automatic cuts still split at the midpoint; timing controls
-update without decoding audio again. Speed Check remains an In progress page.
-39 unit tests and production build passed. Browser checks confirmed that 0.1s before/0.2s after
-keeps all seven sample events, selection shortcuts work, and Big hits only reduces the sample
-to one event. Gallery sharing depends on browser/OS support.
-
-
-## Highlights preview and export startup
-
-Preview highlights plays selected source spans directly, with a highlights-time scrubber and
-pause/replay, before any MP4 is generated. Changing selection/timing resets the preview.
-FFmpeg is prepared while reviewing, using its existing local cache. Adjacent/overlapping
-selected ranges are rendered once; a single resulting span bypasses the join step. Excluded
-gaps remain excluded. Exact 720p remains the default; this optimization does not change to
-keyframe cuts or upload footage. Long exact encodes still depend on device speed.
-42 unit tests, lint, typecheck and production build passed. Local browser checks verified
-preview playback of two separate selected spans, and a 3.2-second MP4 from seven touching
-sound clips (one render instead of seven renders plus a join). No universal speedup claimed.
-
-
-## Simple beat reels and smooth preview (16 November 2026)
-
-Normal highlights retains the existing sound-only editing controls. Waka Waka beat reel defaults
-to 127 BPM (source: https://songbpm.com/@shakira/waka-waka-this-time-for-africa), with one hit every
-2, 4 or 8 beats and editable BPM. No song upload/download or music muxing is required. Add music
-later in a reel editor and align a beat with the first output hit time shown in the app.
-Native-speed source windows center each detected contact in its beat slot. Too-close candidates,
-edge-truncated candidates and manual clips without contact marks are counted and identified as
-omitted. All-sounds detection still includes noise; users must choose real bat contacts.
-Beat cuts use cumulative 30 fps frame rounding and explicit concat durations, avoiding cumulative
-per-hit rounding drift. Audio codecs and source contact accuracy can add timing error.
-
-Prepare preview now renders one lightweight 480p MP4 with native playback controls. Preparation
-is an explicit, cancelable step; playback never seeks through the high-resolution original.
-Selections/timing changes invalidate it. 720p final export is separate. Preview and export are
-serialized and editing is disabled during either job. No new cloud processing.
-45 unit tests, lint, typecheck and production build passed. Browser testing produced a two-hit
-127 BPM/2-beat 480p preview and 720p output, both about 1.923s including audio codec padding.
-Local waveform matching verified source crop continuity; audio encoder delay remained below
-one 30fps frame in this short sample. This is not validation of real bat-contact classification.
-
-
-## Preview availability fix
-
-Preview no longer inherits the full-export memory-budget lock. A separate preview plan caps
-rendering at the first 90 seconds (whole beat slots in beat mode), with an explicit notice;
-full export selection is unchanged. Analysis/export waits and empty selections have visible
-explanations. Prepare preview responds with the relevant explanation instead of silently
-remaining disabled. Only an active preview disables its own button, with Cancel available.
-48 unit tests, lint, typecheck and production build pass, including long-export/short-preview
-regressions. Browser testing confirmed Prepare preview starts rendering after analysis.
-
-
-## Offset and preserve every detected clip
-
-Timing offset shifts each target by -15 to +15 seconds without changing candidate count.
-Positive values shift later than the detected sound (for example, from a bowling-machine noise
-toward contact). Before/after controls define the surrounding window; reduce Before sound if
-the machine noise should be outside the cut. Normal clips retain their complete windows,
-including overlap. Export no longer unions overlapping/adjacent sections or drops repeated
-sections. All detected candidates are initially selected each time a recording loads.
-Speech/loudness filtering is disabled in the active clipper; manual exclusions still work.
-
-Beat mode keeps every selected candidate, including close, edge and manual candidates.
-Overlapping footage repeats intentionally. Held frames and silent audio padding fill beat slots
-at recording boundaries. Extreme offsets clamp the target to available footage; no new footage
-or real contact is inferred. The onset detector still has finite sensitivity/resolution: this
-change guarantees retention of its candidates, not detection of every physical delivery.
-
-50 tests, lint, typecheck and production build pass. Browser checks retained all 7 sample
-candidates after +1s offset and in 4-beat mode, producing a 13.256s 480p preview including codec
-padding. Preview's 90s sample limit is independent of the full export selection.
-
-
-## Editor redesign and GPT Astra review
-
-The editor now uses a warm white/graphite/forest palette, system typography, a preview-first
-workspace and a right-side timing/export column on desktop. The original recording and frame
-controls are collapsible; choosing a clip opens them. All offset, manual clipping, beat timing,
-individual export and keep-every-candidate controls remain available. Font downloads are removed.
-
-GPT Astra independently reviewed the export pipeline and verified real FFmpeg frame counts.
-It fixed short-video/long-audio beat slots (41/57 frames before, 57/57 after), retained end-of-file
-candidates, and verified 57/57 leading-edge plus 114/114 short silent-video padding cases.
-52 tests, typecheck, lint and production build pass. New UI browser verification was explicitly
-declined, so the redesigned layout has not been visually verified. The earlier offset/overlap
-browser tests apply to the functional implementation, before the visual restyle.
-Next.js and matching ESLint config received the minimal 16.4.5 security patch. Production audit
-reported no known vulnerabilities after the patch; other pinned dependencies are unchanged.
+Vercel hosts the Next.js app. Historical implementation notes are in `FIX-VALIDATION.md`;
+the current behavior above supersedes old experiments described there.

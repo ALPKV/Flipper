@@ -11,12 +11,12 @@ test("large original recordings recommend a single bounded-size compact export",
   assert.equal(plan.fits, true);
   assert.ok(plan.estimatedBytes < 90e6);
 });
-test("small reels preserve original quality without unnecessary re-encoding", () => {
-  assert.equal(planExport(100e6, 300, 20, 8, "auto", false).precise, false);
+test("all reels use exact encoding instead of keyframe copying", () => {
+  assert.equal(planExport(100e6, 300, 20, 8, "auto", false).precise, true);
 });
 test("oversized single-file exports are rejected rather than creating surprise parts", () => {
   assert.equal(planExport(7.5e9, 1800, 1200, 400, "compact", true).fits, false);
-  assert.equal(planExport(7.5e9, 1800, 300, 100, "original", true).fits, false);
+  assert.equal(planExport(7.5e9, 1800, 1200, 400, "original", true).fits, false);
 });
 test("noisy-hall filtering preserves strong impacts while rejecting weak rises and speech", () => {
   const sounds: Sound[] = [

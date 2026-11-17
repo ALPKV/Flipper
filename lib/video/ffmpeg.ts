@@ -6,10 +6,10 @@ import type { FFmpeg } from "@ffmpeg/ffmpeg";
 /**
  * FFmpeg compiled to WebAssembly, running in a worker in the browser. The video file is mounted
  * read-only (WORKERFS), so even multi-gigabyte recordings are read in pieces, never copied whole.
- * The ~30 MB engine downloads once from a public CDN and is then cached by the browser.
+ * The ~31 MB engine downloads once from this website and is then cached by the browser.
  */
 
-const CORE = "https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.10/dist/esm";
+const CORE = "/vendor/ffmpeg-core/0.12.10";
 /** Served from public/ (see scripts/copy-ffmpeg.mjs) so its worker is same-origin. */
 const FFMPEG_MODULE = "/vendor/ffmpeg/index.js";
 
@@ -20,7 +20,7 @@ let generation = 0;
 async function toBlobURL(url: string, type: string, signal: AbortSignal): Promise<string> {
   // Rebuilding a worker after an export must not download another 30 MB engine.
   let cache: Cache | undefined;
-  try { cache = await caches.open("flipper-ffmpeg-core-0.12.10"); } catch { /* private-mode fallback */ }
+  try { cache = await caches.open("flipper-ffmpeg-core-selfhost-0.12.10"); } catch { /* private-mode fallback */ }
   let res = await cache?.match(url).catch(() => undefined);
   if (!res) {
     res = await fetch(url, { signal });
@@ -193,31 +193,23 @@ export async function extractAudio(
   });
 }
 
-/**
- * Cuts [start, start+duration). Fast mode copies the stream (seconds, original quality, but the cut
- * snaps to the keyframe before `start`). Precise mode re-encodes, so every clip starts on the exact
- * frame; it is slower and fits the output inside 1280×720 at a bounded bitrate.
- */
+/** Frame-accurate 30 fps cuts. Lossless intermediates avoid repeated AAC encoder delay. */
 async function cut(ff: FFmpeg, path: string, start: number, duration: number, out: string, precise = false, edge=720, frames?:number,padBefore=0,padAfter=0) {
   // The last video frame can precede the file's reported duration. Hold it until the
   // requested frame count, and pad short audio too, so every beat slot stays full.
   const padding=frames?`,tpad=start_mode=clone:start_duration=${padBefore}:stop_mode=clone:stop=-1`:padBefore||padAfter?`,tpad=start_mode=clone:start_duration=${padBefore}:stop_mode=clone:stop_duration=${padAfter}`:"";
-  const codec = precise
-    ? ["-vf", `scale=w='min(${Math.round(edge*16/9)},iw)':h='min(${edge},ih)':force_original_aspect_ratio=decrease:force_divisible_by=2${frames?",fps=30":""}${padding}`, "-c:v", "libx264", "-threads", "1", "-preset", "ultrafast", "-b:v", edge<=480?"700k":"1500k", "-maxrate", edge<=480?"700k":"1500k", "-bufsize", "3000k", "-pix_fmt", "yuv420p", "-c:a", "aac", "-b:a", "96k", "-ar", "44100", "-ac", "2"]
-    : ["-c", "copy", "-avoid_negative_ts", "make_zero"];
+  const intermediate=out.endsWith(".mov");
+  const audioCodec=intermediate?["-c:a","alac"]:["-c:a","aac","-b:a","96k"];
+  void precise; // Legacy argument: arbitrary source boundaries are always decoded.
+  const codec = ["-vf", `scale=w='min(${Math.round(edge*16/9)},iw)':h='min(${edge},ih)':force_original_aspect_ratio=decrease:force_divisible_by=2,setpts=PTS-STARTPTS${frames?",fps=30":""}${padding}`, "-c:v", "libx264", "-threads", "1", "-preset", "ultrafast", "-b:v", edge<=480?"700k":"1500k", "-maxrate", edge<=480?"700k":"1500k", "-bufsize", "3000k", "-pix_fmt", "yuv420p", ...audioCodec, "-ar", "44100", "-ac", "2"];
   await execute(ff,[
     "-filter_threads", "1", "-filter_complex_threads", "1", "-threads", "1", "-ss", start.toFixed(6), "-i", path, "-t", (frames?frames/30:duration).toFixed(6),
-    "-map", "0:v:0", "-map", "0:a:0?", ...codec, ...(frames||padBefore||padAfter?["-af",`adelay=${Math.round(padBefore*1000)}:all=1,apad`]:[]), ...(frames?["-frames:v",String(frames)]:[]), "-movflags", "+faststart", out,
+    "-map", "0:v:0", "-map", "0:a:0?", ...codec, ...(frames||padBefore||padAfter?["-af",`adelay=${Math.round(padBefore*1000)}:all=1,apad`]:[]), "-movflags", "+faststart", out,
   ],"FFmpeg could not cut this clip. The recording may use an unsupported or damaged video codec.");
 }
 
 export async function exportClip(file: File, start: number, duration: number): Promise<Blob> {
-  return withFile(file, async (ff, path) => {
-    await cut(ff, path, start, duration, "/clip.mp4");
-    const data = (await ff.readFile("/clip.mp4")) as Uint8Array;
-    await ff.deleteFile("/clip.mp4");
-    return new Blob([data as Uint8Array<ArrayBuffer>], { type: "video/mp4" });
-  });
+  return exportReel(file,[{start,end:start+duration}],undefined,{precise:true});
 }
 
 /**
@@ -254,10 +246,10 @@ async function exportReelAttempt(
       }
       await withFile(file,async(ff,path)=>{
         for(let k=from;k<to;k++){
-          await cut(ff,path,clips[k].start,clips[k].end-clips[k].start,"/part.mp4",precise||preview||lowMemory||!!frameCounts,preview||lowMemory?480:720,frameCounts?.[k],clips[k].padBefore,clips[k].padAfter);
-          const data=await ff.readFile("/part.mp4") as Uint8Array<ArrayBuffer>;
-          await ff.deleteFile("/part.mp4");
-          parts.push({name:`p${k}.mp4`,data:new Blob([data],{type:"video/mp4"})});
+          await cut(ff,path,clips[k].start,clips[k].end-clips[k].start,"/part.mov",precise||preview||lowMemory||!!frameCounts,preview||lowMemory?480:720,frameCounts?.[k],clips[k].padBefore,clips[k].padAfter);
+          const data=await ff.readFile("/part.mov") as Uint8Array<ArrayBuffer>;
+          await ff.deleteFile("/part.mov");
+          parts.push({name:`p${k}.mov`,data:new Blob([data],{type:"video/mp4"})});
           onProgress?.((k+1)/(clips.length+1));
         }
       },true);
@@ -288,6 +280,12 @@ async function exportReelAttempt(
 export async function exportReel(file:File,clips:ReelRange[],onProgress?:(fraction:number)=>void,
  options:{precise?:boolean;preview?:boolean;frameCounts?:number[];onStatus?:(message:string)=>void}={}):Promise<Blob>{
  const token=generation;
+ const ranges=reelRanges(clips);
+ if(!options.frameCounts){
+  clips=ranges;
+  options={...options,frameCounts:ranges.map(c=>Math.max(1,Math.round((c.end-c.start)*30)))};
+ }
+ options={...options,precise:true};
  try{
   return await exportReelAttempt(file,clips,onProgress,options);
  }catch(err){

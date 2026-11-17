@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { canSaveToPhotos, download, exportReel, isApple, isTouchDevice, releaseEngine, prepareExport, saveToPhotos } from "@/lib/video/ffmpeg";
-import { planExport, type ExportQuality } from "@/lib/video/export-plan";
+import { planExport } from "@/lib/video/export-plan";
 import { Button, Meter, Panel } from "../ui";
 import { Stage } from "./stage";
 import { FileBar, VideoDrop, clock } from "./video-drop";
@@ -48,16 +48,17 @@ export function Highlights() {
   const [progress, setProgress] = useState(0);
   const [exportStatus,setExportStatus]=useState("Creating MP4");
   const [error, setError] = useState<string | null>(null);
-  const [quality,setQuality]=useState<ExportQuality>("compact");
+  const quality="compact";
   const [undo,setUndo]=useState<string|null>(null);
   const shareable=useSyncExternalStore(subscribe,canSaveToPhotos,serverFalse);
   const [sourceOpen,setSourceOpen]=useState(false);
   const [showAll, setShowAll] = useState(false);
   const generation = useRef(0);
+  const exportJob=useRef(false);
   const touch = useSyncExternalStore(subscribe, isTouchDevice, serverFalse);
   useEffect(() => () => { cancelScan(); generation.current++; releaseEngine(); }, [cancelScan]);
   useEffect(() => () => { if (output) URL.revokeObjectURL(output.url); }, [output]);
-  useEffect(() => { generation.current++; }, [v.file]);
+  useEffect(() => { generation.current++; exportJob.current=false; }, [v.file]);
   useEffect(()=>{
     if(!v.file)return;
     let active=true;
@@ -76,6 +77,7 @@ export function Highlights() {
     .map(c=>({...c, priority: pinned.has(c.id) ? 100 : c.kind === "bat" ? 2 : 1}));
   const selected = candidates.sort((a,b)=>a.start-b.start);
   const selectedIds = new Set(selected.map(c=>c.id));
+  const clipNumbers=new Map(v.clips.map((c,i)=>[c.id,i+1]));
   const beatPlan=beatReel(selected,bpm,beats,v.meta?.duration??0,v.settings.offset);
   const ranges=beatMode?beatPlan.cuts:reelRanges(selected);
   const frameCounts=beatMode?beatPlan.cuts.map(c=>c.frames):undefined;
@@ -92,7 +94,8 @@ export function Highlights() {
     else { setSkip(old=>{const n=new Set(old); n.delete(id); return n;}); setPinned(old=>new Set(old).add(id)); }
   }
   async function build(single?: (typeof v.clips)[number]) {
-    if(previewing)return;
+    if(exportJob.current||previewing)return;
+    exportJob.current=true;
     const token = ++generation.current;
     v.playerRef.current?.pause();
     setExporting(true); setProgress(0); setError(null); setExportStatus("Creating MP4"); setOutput(null);
@@ -101,10 +104,12 @@ export function Highlights() {
       const blob = await exportReel(file, single?[beatCut??single]:ranges, p=>{if(generation.current===token)setProgress(p);}, {onStatus:message=>{if(generation.current===token)setExportStatus(message);},precise: plan.precise,frameCounts:single?(beatCut?[beatCut.frames]:undefined):frameCounts});
       if (generation.current === token) setOutput({blob,url:URL.createObjectURL(blob),signature:single?`single:${single.id}|${signature}`:signature,name:`${file.name.replace(/\.[^.]+$/,"")}_${single?"clip_"+single.id:"highlights"}.mp4`});
     } catch(err) { if(generation.current===token)setError(err instanceof Error?err.message:"Export failed."); }
-    finally { if(generation.current===token)setExporting(false); }
+    finally { if(generation.current===token){exportJob.current=false;setExporting(false);} }
   }
   return <div className="space-y-5">
-    <FileBar />
+    <FileBar disabled={locked}/>
+    {v.loadError?<p role="alert" className="text-sm text-risk">{v.loadError}</p>:null}
+    {v.previewError?<p role="status" className="text-sm">{v.previewError}</p>:null}
     <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_340px]">
       <div className="min-w-0 space-y-5">
         <ReelPreview key={signature} file={file} ranges={ranges} frameCounts={frameCounts} blockedReason={beatMode&&!validBpm?"Enter a tempo between 40 and 240 BPM.":beatMode&&!beatReady?"Reading the recording duration. Clips will be ready after sound analysis.":pending?`Sound analysis is still running (${Math.round(v.audio.progress*100)}%). Preview will be ready when it finishes.`:exporting?"An export is running. Finish or cancel it before preparing a preview.":null} onBusy={setPreviewing}/>
@@ -114,17 +119,18 @@ export function Highlights() {
           <div className="mb-3 flex flex-wrap gap-2">
             <Button size="sm" tone="ghost" disabled={locked} onClick={()=>{v.clips.forEach(c=>rememberRejection(file,c.id,true));setSkip(new Set());setPinned(new Set(v.clips.map(c=>c.id)));}}>Select all</Button>
             <Button size="sm" tone="ghost" disabled={locked} onClick={()=>setSkip(new Set(v.clips.map(c=>c.id)))}>Select none</Button>
+            <Button size="sm" tone="ghost" title="Keep alternating entries from the full chronological list. Select all restores them." disabled={locked||pending} onClick={()=>{setSkip(new Set(v.clips.filter((_,i)=>i%2===1).map(c=>c.id)));setPinned(new Set(v.clips.filter((_,i)=>i%2===0).map(c=>c.id)));setUndo(null);}}>Keep 1st, 3rd, 5th...</Button>
             <Button size="sm" tone="ghost" disabled={locked} onClick={()=>{const c=v.addManualClip(v.playhead());v.select(c.id);setPinned(old=>new Set(old).add(c.id));}}>Add at playhead</Button>
             {undo?<Button size="sm" tone="ghost" disabled={locked} onClick={()=>{rememberRejection(file,undo,true);setSkip(old=>{const n=new Set(old);n.delete(undo);return n;});setUndo(null);}}>Undo exclusion</Button>:null}
           </div>
           <ol className="max-h-[540px] overflow-y-auto divide-y divide-line">{rows.slice(0,visibleCount).map((c,index)=><li key={c.id} className={`flex flex-wrap items-center gap-3 py-3 ${selectedIds.has(c.id)?"":"opacity-60"}`}>
-            <input type="checkbox" aria-label={`Include clip ${index+1}`} disabled={locked} checked={selectedIds.has(c.id)} onChange={()=>toggle(c.id)}/>
-            <button className="flex-1 text-left text-sm" onClick={()=>{setSourceOpen(true);v.select(c.id);v.seek(c.start,true);}}><span className="mr-2 text-xs text-mute">{String(index+1).padStart(2,"0")}</span><b>{clock(c.start)}</b> · {(c.end-c.start).toFixed(1)}s<span className="block text-xs text-mute">{beatMode?(beatPlan.cuts.some(b=>b.id===c.id)?"Included in beat reel":"Waiting for recording information"):c.manual?"Manually added clip":"Sound detected · review candidate"}</span></button>
+            <input type="checkbox" aria-label={`Include clip ${clipNumbers.get(c.id)??index+1}`} disabled={locked} checked={selectedIds.has(c.id)} onChange={()=>toggle(c.id)}/>
+            <button className="flex-1 text-left text-sm" onClick={()=>{setSourceOpen(true);v.select(c.id);v.seek(c.start,true);}}><span className="mr-2 text-xs text-mute">{String(clipNumbers.get(c.id)??index+1).padStart(2,"0")}</span><b>{clock(c.start)}</b> · {(c.end-c.start).toFixed(1)}s<span className="block text-xs text-mute">{beatMode?(beatPlan.cuts.some(b=>b.id===c.id)?"Included in beat reel":"Waiting for recording information"):c.manual?"Manually added clip":"Sound detected · review candidate"}</span></button>
             <Button size="sm" tone="ghost" disabled={locked||pending} onClick={()=>void build(c)}>Export clip</Button>
             <Button size="sm" tone="ghost" disabled={locked} onClick={()=>{setUndo(c.id);rememberRejection(file,c.id);setSkip(old=>new Set(old).add(c.id));}}>Not a delivery</Button>
           </li>)}</ol>
           {rows.length>visibleCount?<div className="mt-3 flex items-center justify-between gap-3 text-xs text-mute"><span>Showing {visibleCount} of {rows.length}. All selected clips stay in the export.</span><Button size="sm" tone="ghost" onClick={()=>setVisibleCount(n=>n+100)}>Show 100 more</Button></div>:null}
-          {!rows.length ? <p className="text-sm">{pending?"Candidates will appear after analysis.":"No sound candidates selected. Show all candidates to review your choices."}</p> : null}
+          {!rows.length ? <p className="text-sm">{pending?"Candidates will appear after analysis.":v.audio.status==="none"?"No audio track: use the original recording controls and Add at playhead to make clips manually.":v.audio.status==="error"?"Sound analysis could not finish. See the message in Cut timing, or add clips manually.":"No sound candidates selected. Show all candidates to review your choices."}</p> : null}
         </Panel>
       </div>
       <aside className="space-y-5">
@@ -151,11 +157,11 @@ export function Highlights() {
         <Panel title="Export reel">
           <p className="text-4xl font-semibold tracking-tight tabular-nums text-ink">{clock(seconds)}</p><p className="mt-2 text-sm">{beatMode?beatPlan.cuts.length:selected.length} {beatMode?"beat-timed hits":"selected clips"} · no time limit</p>
           <p className="mt-3 text-xs text-mute">{beatMode?"Hits follow your chosen beat spacing.":"Every selected clip is exported in full, including overlapping footage."} {plan.reason}.</p>
-          <label className="mt-4 block text-sm">Export quality<select aria-label="Export quality" className="field mt-1" disabled={locked||beatMode} value={beatMode?"compact":quality} onChange={e=>setQuality(e.target.value as ExportQuality)}><option value="compact">Smaller 720p — exact cuts</option><option value="auto">Recommended — one file</option><option value="original">Original quality — faster</option></select></label>
-          <p className="mt-2 text-xs text-mute">Estimated size: {Math.ceil(plan.estimatedBytes/1e6)} MB. {beatMode?"Beat mode always uses exact 30 fps cuts.":"Original-quality cuts may include extra footage near keyframes."}</p>
+          <p className="mt-4 text-sm">720p MP4 / exact cuts / all processing stays on this device.</p>
+          <p className="mt-2 text-xs text-mute">Estimated size: {Math.ceil(plan.estimatedBytes/1e6)} MB. {beatMode?"Beat mode always uses exact 30 fps cuts.":"Normal highlights uses exact 30 fps cuts."}</p>
           <Button className="mt-4 w-full" tone="gold" disabled={pending || locked || !beatReady || !ranges.length || !plan.fits} onClick={()=>void build()}>{exporting?"Making your reel…":"Create highlights"}</Button>
           <p role="status" className="mt-2 text-xs text-mute">{exporting?`${exportStatus} · ${Math.round(progress*100)}%`:engineState}</p>
-          {exporting ? <div className="mt-3"><Meter value={progress} max={1}/><Button className="mt-2" size="sm" tone="ghost" onClick={()=>{generation.current++;releaseEngine();setExporting(false);setError("Export canceled. Your choices are still here.");}}>Cancel export</Button></div> : null}
+          {exporting ? <div className="mt-3"><Meter value={progress} max={1}/><Button className="mt-2" size="sm" tone="ghost" onClick={()=>{generation.current++;releaseEngine();exportJob.current=false;setExporting(false);setError("Export canceled. Your choices are still here.");}}>Cancel export</Button></div> : null}
           {!plan.fits ? <p className="mt-3 text-sm text-risk">This output exceeds this device&apos;s memory budget. Exclude some candidates before exporting.</p> : null}
           {error ? <p role="alert" className="mt-3 text-sm text-risk">{error}</p> : null}
         </Panel>

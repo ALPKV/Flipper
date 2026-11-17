@@ -13,6 +13,7 @@ export function ReelPreview({file,ranges,frameCounts,blockedReason,onBusy}:{file
  useEffect(()=>()=>{token.current++;if(running.current){releaseEngine();onBusy(false);}},[onBusy]);
  useEffect(()=>()=>{if(url)URL.revokeObjectURL(url);},[url]);
  async function prepare(){
+  if(running.current)return;
   if(blockedReason){setError(blockedReason);return;}
   if(!plan.ranges.length){setError("Select clips below, or switch to Normal highlights if no hits fit the beat setting.");return;}
   const id=++token.current;setBusy(true);running.current=true;onBusy(true);setError("");setProgress(0);setStatus("Preparing preview");
