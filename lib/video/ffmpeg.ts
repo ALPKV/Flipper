@@ -13,41 +13,67 @@ const CORE = "https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.10/dist/esm";
 /** Served from public/ (see scripts/copy-ffmpeg.mjs) so its worker is same-origin. */
 const FFMPEG_MODULE = "/vendor/ffmpeg/index.js";
 
-let instance: Promise<FFmpeg> | null = null;
+type Engine = { promise: Promise<FFmpeg>; worker?: FFmpeg; controller: AbortController };
+let instance: Engine | null = null;
+let generation = 0;
 
-async function toBlobURL(url: string, type: string): Promise<string> {
+async function toBlobURL(url: string, type: string, signal: AbortSignal): Promise<string> {
   // Rebuilding a worker after an export must not download another 30 MB engine.
   let cache: Cache | undefined;
   try { cache = await caches.open("flipper-ffmpeg-core-0.12.10"); } catch { /* private-mode fallback */ }
-  let res = await cache?.match(url);
+  let res = await cache?.match(url).catch(() => undefined);
   if (!res) {
-    res = await fetch(url);
+    res = await fetch(url, { signal });
     if (res.ok) await cache?.put(url, res.clone()).catch(() => {});
   }
   if (!res.ok) throw new Error("Could not download the video engine. Check your connection.");
-  return URL.createObjectURL(new Blob([await res.arrayBuffer()], { type }));
+  const data = await res.arrayBuffer();
+  signal.throwIfAborted();
+  return URL.createObjectURL(new Blob([data], { type }));
+}
+
+function stopEngine(engine: Engine, reason: unknown = new DOMException("Video processing canceled.", "AbortError")) {
+  if (instance === engine) instance = null;
+  engine.controller.abort(reason);
+  engine.worker?.terminate();
 }
 
 async function getFFmpeg(): Promise<FFmpeg> {
   if (!instance) {
-    instance = (async () => {
+    const engine: Engine = { promise: null!, controller: new AbortController() };
+    instance = engine;
+    const { signal } = engine.controller;
+    // A failed worker startup must not leave every subsequent export waiting forever.
+    const timeout = setTimeout(() => stopEngine(engine, new Error("The video engine could not start. Check your connection and try again.")), 120_000);
+    const urls: string[] = [];
+    const load = (async () => {
       const { FFmpeg } = (await import(
         /* webpackIgnore: true */ /* turbopackIgnore: true */ FFMPEG_MODULE
       )) as typeof import("@ffmpeg/ffmpeg");
+      signal.throwIfAborted();
       const ff = new FFmpeg();
-      const urls = await Promise.all([
-        toBlobURL(`${CORE}/ffmpeg-core.js`, "text/javascript"),
-        toBlobURL(`${CORE}/ffmpeg-core.wasm`, "application/wasm"),
-      ]);
-      try { await ff.load({ coreURL: urls[0], wasmURL: urls[1] }); }
-      finally { urls.forEach((url) => URL.revokeObjectURL(url)); }
+      engine.worker = ff;
+      const [coreURL, wasmURL] = await Promise.all([
+        toBlobURL(`${CORE}/ffmpeg-core.js`, "text/javascript", signal),
+        toBlobURL(`${CORE}/ffmpeg-core.wasm`, "application/wasm", signal),
+      ].map(async task => { const url = await task; urls.push(url); return url; }));
+      signal.throwIfAborted();
+      await ff.load({ coreURL, wasmURL }, { signal });
       return ff;
-    })().catch((err) => {
-      instance = null;
-      throw err;
+    })();
+    let onAbort: () => void;
+    const aborted = new Promise<never>((_, reject) => { onAbort = () => reject(signal.reason); signal.addEventListener("abort", onAbort, { once: true }); });
+    engine.promise = Promise.race([load, aborted]).catch((err) => {
+      const reason = signal.aborted ? signal.reason : err;
+      stopEngine(engine, reason);
+      throw reason;
+    }).finally(() => {
+      clearTimeout(timeout);
+      signal.removeEventListener("abort", onAbort);
+      urls.forEach((url) => URL.revokeObjectURL(url));
     });
   }
-  return instance;
+  return instance.promise;
 }
 
 /** Load/cache the engine while the user reviews clips rather than after Export. */
@@ -58,9 +84,11 @@ export async function prepareExport(){await getFFmpeg();}
  * holding hundreds of megabytes (and a copy of whatever it last made); the next job starts fresh.
  */
 export function releaseEngine() {
+  generation++;
   const old = instance;
-  instance = null;
-  void old?.then((ff) => ff.terminate()).catch(() => {});
+  if (old) stopEngine(old);
+  // Canceled work belongs to the old worker; new work need not wait for its cleanup.
+  queue = Promise.resolve();
 }
 
 type Mount = { files?: File[]; blobs?: { name: string; data: Blob }[] };
@@ -71,18 +99,26 @@ type Mount = { files?: File[]; blobs?: { name: string; data: Blob }[] };
  */
 let queue: Promise<unknown> = Promise.resolve();
 async function withMount<T>(dir: string, inputs: Mount, fn: (ff: FFmpeg) => Promise<T>, release = false): Promise<T> {
+  const token = generation;
   const job = queue.then(async () => {
+    if (token !== generation) throw new DOMException("Video processing canceled.", "AbortError");
     const ff = await getFFmpeg();
+    const engine = instance;
     let ok = false;
     try {
+      if (token !== generation) throw new DOMException("Video processing canceled.", "AbortError");
       await ff.createDir(dir).catch(() => {});
       await ff.mount("WORKERFS" as never, inputs, dir);
       const result = await fn(ff);
+      if (token !== generation) throw new DOMException("Video processing canceled.", "AbortError");
       ok = true;
       return result;
+    } catch (err) {
+      if (token !== generation) throw new DOMException("Video processing canceled.", "AbortError");
+      throw err;
     } finally {
       await ff.unmount(dir).catch(() => {});
-      if (release || !ok) releaseEngine();
+      if ((release || !ok) && engine?.worker === ff) stopEngine(engine);
     }
   });
   queue = job.catch(() => {});
@@ -95,6 +131,7 @@ function withFile<T>(file: File, fn: (ff: FFmpeg, path: string) => Promise<T>, r
 }
 
 function friendly(err: unknown): Error {
+  if (err instanceof Error && err.name === "AbortError") return err;
   const msg = err instanceof Error ? err.message : String(err);
   if (/memory|abort|terminat|RuntimeError|OOM/i.test(msg)) {
     return new Error("This device ran out of memory making the video. Untick some clips, or tick Exact cuts for a smaller file.");
@@ -174,6 +211,7 @@ export async function exportReel(
   onProgress?: (fraction: number) => void,
   { precise = false, preview = false, frameCounts }: { precise?: boolean;preview?:boolean;frameCounts?:number[] } = {},
 ): Promise<Blob> {
+  const token = generation;
   try {
     if(!frameCounts)clips=reelRanges(clips);
     if(frameCounts&&(frameCounts.length!==clips.length||frameCounts.some(n=>!Number.isInteger(n)||n<=0)))throw new Error("Invalid beat timing.");
@@ -195,6 +233,7 @@ export async function exportReel(
       }
       return out;
     });
+    if (token !== generation) throw new DOMException("Video processing canceled.", "AbortError");
     return await withMount(
       "/parts",
       { blobs: parts },

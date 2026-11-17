@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import {test} from "node:test";
 import {beatReel} from "../lib/video/beat-reel.ts";
-test("Waka Waka hits follow a 127 BPM grid without cumulative frame drift",()=>{
+test("sound hits follow a custom BPM grid without cumulative frame drift",()=>{
  const clips=Array.from({length:100},(_,i)=>({id:String(i),contact:3+i*4}));
  const {cuts,skipped}=beatReel(clips,127,4,405);
  assert.equal(cuts.length,100);assert.equal(skipped,0);
@@ -28,7 +28,20 @@ test("beat offset shifts the target without dropping clips or changing beat slot
  shifted.cuts.forEach((c,i)=>{assert.ok(Math.abs(c.start-original.cuts[i].start-1)<1e-8);assert.equal(c.hitAt,original.cuts[i].hitAt);});
 });
 test("invalid tempo and intervals cannot create a beat export",()=>{
- for(const [bpm,beats] of [[0,4],[NaN,4],[127,3],[300,4]])assert.equal(beatReel([{id:"a",contact:3}],bpm,beats,10).cuts.length,0);
+ for(const [bpm,beats] of [[0,4],[NaN,4],[127,0],[127,17],[127,1.5],[300,4]])assert.equal(beatReel([{id:"a",contact:3}],bpm,beats,10).cuts.length,0);
+});
+
+test("custom one, three and sixteen beat intervals retain centered, overlapping candidates",()=>{
+ const clips=[{id:"a",contact:20},{id:"b",contact:20.1},{id:"c",contact:20.2}];
+ for(const beats of [1,3,16]){
+  const {cuts,skipped}=beatReel(clips,123,beats,60,.5);
+  assert.equal(skipped,0);assert.deepEqual(cuts.map(c=>c.id),clips.map(c=>c.id));
+  cuts.forEach((c,i)=>{
+   assert.ok(Math.abs((c.start+c.end)/2-(clips[i].contact+.5))<=1/60+1e-8);
+   assert.ok(Math.abs(c.end-c.start-60/123*beats)<=1/30+1e-8);
+   if(i)assert.ok(c.start<cuts[i-1].end);
+  });
+ }
 });
 
 test("edge padding fills every beat slot even when the recording is shorter than one slot",()=>{

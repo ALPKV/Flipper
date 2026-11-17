@@ -122,6 +122,7 @@ export async function nativeAudio(file: File, signal: AbortSignal, progress: (p:
       progress(Math.min(1, (item.timestamp + buffer.duration) / duration));
     }
     if (!seen) throw new Error("No readable audio.");
-    return { pcm, sampleRate, duration };
+    const video=await input.getPrimaryVideoTrack();
+    return { pcm, sampleRate, duration, width:video?.displayWidth??0, height:video?.displayHeight??0 };
   } finally { signal.removeEventListener("abort", abort); input.dispose(); }
 }

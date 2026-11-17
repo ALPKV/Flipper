@@ -2,7 +2,7 @@ export type BeatClip={id:string;contact:number|null;start?:number;end?:number;an
 export type BeatCut={start:number;end:number;frames:number;hitAt:number;id:string;padBefore:number;padAfter:number};
 /** Keep every candidate. Overlap is intentional; edge frames are held to fill beat slots. */
 export function beatReel(clips:BeatClip[],bpm:number,beats:number,duration:number,offset=0):{cuts:BeatCut[];skipped:number}{
- if(!Number.isFinite(bpm)||bpm<40||bpm>240||![2,4,8].includes(beats)||!Number.isFinite(duration)||duration<=0)return {cuts:[],skipped:clips.length};
+ if(!Number.isFinite(bpm)||bpm<40||bpm>240||!Number.isInteger(beats)||beats<1||beats>16||!Number.isFinite(duration)||duration<=0)return {cuts:[],skipped:clips.length};
  const period=60/bpm*beats;
  const cuts=clips.map((c,i)=>{
   const a=Math.round(i*period*30),b=Math.round((i+1)*period*30),hitFrame=Math.round((i+.5)*period*30);

@@ -1,6 +1,7 @@
 "use client";
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
+import {recordingMetadata} from "@/lib/video/recording-metadata";
 import type { BallAnalysis } from "@/lib/tracking/analyze";
 import { coverage, type ScanResult } from "@/lib/tracking/visual-deliveries";
 import { type DeliveryCategory } from "@/lib/tracking/pose-actions";
@@ -104,7 +105,7 @@ export function useVideo(): Ctx {
   return v;
 }
 
-const DEFAULT_SETTINGS: ClipSettings = { timing: NORMAL_TIMING, threshold: -120, noisy: false, visual: false, motionSensitivity: .012, gap: 3, offset:0, leadIn: 1.5, length: 5 };
+const DEFAULT_SETTINGS: ClipSettings = { timing: NORMAL_TIMING, threshold: -120, noisy: false, visual: false, motionSensitivity: .012, gap: 3, offset:0, leadIn: 1.5, length: 3 };
 const DEFAULT_TRACKING: TrackingSetup = { ...DEFAULT_SETUP, stumps: null };
 
 const emptyMarks = (): Marks => ({
@@ -190,7 +191,8 @@ export function VideoProvider({ children }: { children: React.ReactNode }) {
       probe.src = u;
       probe.onloadedmetadata = () => {
         if (token === loadToken.current) {
-          setMeta({ duration: probe.duration, width: probe.videoWidth, height: probe.videoHeight });
+          const measured={duration:probe.duration,width:probe.videoWidth,height:probe.videoHeight};
+          setMeta(current=>recordingMetadata(measured,current??{}));
         }
         probe.removeAttribute("src");
       };
@@ -211,6 +213,8 @@ export function VideoProvider({ children }: { children: React.ReactNode }) {
       })
         .then(async (res) => {
           if (token !== loadToken.current) return;
+          const decoded={duration:"duration" in res?Number(res.duration):res.pcm.length/res.sampleRate,width:"width" in res?Number(res.width):0,height:"height" in res?Number(res.height):0};
+          setMeta(current=>recordingMetadata(current,decoded));
           const impacts = await new Promise<Sound[]>((resolve, reject) => {
             const worker = new Worker(new URL("../../lib/video/audio-worker.ts", import.meta.url), { type: "module" });
             scanner.current = worker;
