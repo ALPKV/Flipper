@@ -130,13 +130,34 @@ function withFile<T>(file: File, fn: (ff: FFmpeg, path: string) => Promise<T>, r
   return withMount("/in", { files: [file] }, (ff) => fn(ff, `/in/${file.name}`), release);
 }
 
+/** Only explicit allocation failures are called memory errors; codec/worker failures differ. */
+function memoryFailure(err: unknown): boolean {
+  const msg=err instanceof Error?err.message:String(err);
+  return /out of memory|ran out of memory|OOM|allocation failed|cannot allocate memory|failed to allocate|cannot enlarge memory|Array buffer allocation|WebAssembly.Memory/i.test(msg);
+}
+function engineFailure(err:unknown):boolean{
+ return (err instanceof Error&&err.name==="RuntimeError")||/RuntimeError|Aborted\(|terminated|memory access out of bounds/i.test(err instanceof Error?err.message:String(err));
+}
+function recoverable(err: unknown): boolean {
+  return !(err instanceof Error&&err.name==="AbortError")&&(memoryFailure(err)||engineFailure(err));
+}
 function friendly(err: unknown): Error {
   if (err instanceof Error && err.name === "AbortError") return err;
-  const msg = err instanceof Error ? err.message : String(err);
-  if (/memory|abort|terminat|RuntimeError|OOM/i.test(msg)) {
-    return new Error("This device ran out of memory making the video. Untick some clips, or tick Exact cuts for a smaller file.");
-  }
+  if (memoryFailure(err)) return new Error("This browser could not finish even the lower-memory export. Your clips are still selected. Try this recording in desktop Chrome or Edge; device memory limits cannot be removed by this website.");
+  const msg=err instanceof Error?err.message:String(err);
+  if(engineFailure(err))return new Error("The video engine stopped unexpectedly. Your clips are still selected. Try again, or use an H.264 MP4 recording.");
   return err instanceof Error ? err : new Error(msg);
+}
+
+/** FFmpeg can report allocation failure in stderr and return a code instead of throwing. */
+async function execute(ff:FFmpeg,args:string[],failure:string){
+ let allocation="";
+ const log=({message}:{message:string})=>{if(memoryFailure(message))allocation=message.slice(-500);};
+ ff.on("log",log);
+ try{
+  const code=await ff.exec(args);
+  if(code!==0)throw new Error(allocation?`Out of memory: ${allocation}`:failure);
+ }finally{ff.off("log",log);}
 }
 
 /**
@@ -182,13 +203,12 @@ async function cut(ff: FFmpeg, path: string, start: number, duration: number, ou
   // requested frame count, and pad short audio too, so every beat slot stays full.
   const padding=frames?`,tpad=start_mode=clone:start_duration=${padBefore}:stop_mode=clone:stop=-1`:padBefore||padAfter?`,tpad=start_mode=clone:start_duration=${padBefore}:stop_mode=clone:stop_duration=${padAfter}`:"";
   const codec = precise
-    ? ["-vf", `scale=w='min(${Math.round(edge*16/9)},iw)':h='min(${edge},ih)':force_original_aspect_ratio=decrease:force_divisible_by=2${frames?",fps=30":""}${padding}`, "-c:v", "libx264", "-preset", "ultrafast", "-b:v", edge<=480?"700k":"1500k", "-maxrate", edge<=480?"700k":"1500k", "-bufsize", "3000k", "-pix_fmt", "yuv420p", "-c:a", "aac", "-b:a", "96k", "-ar", "44100", "-ac", "2"]
+    ? ["-vf", `scale=w='min(${Math.round(edge*16/9)},iw)':h='min(${edge},ih)':force_original_aspect_ratio=decrease:force_divisible_by=2${frames?",fps=30":""}${padding}`, "-c:v", "libx264", "-threads", "1", "-preset", "ultrafast", "-b:v", edge<=480?"700k":"1500k", "-maxrate", edge<=480?"700k":"1500k", "-bufsize", "3000k", "-pix_fmt", "yuv420p", "-c:a", "aac", "-b:a", "96k", "-ar", "44100", "-ac", "2"]
     : ["-c", "copy", "-avoid_negative_ts", "make_zero"];
-  const code = await ff.exec([
-    "-ss", start.toFixed(6), "-i", path, "-t", (frames?frames/30:duration).toFixed(6),
+  await execute(ff,[
+    "-filter_threads", "1", "-filter_complex_threads", "1", "-threads", "1", "-ss", start.toFixed(6), "-i", path, "-t", (frames?frames/30:duration).toFixed(6),
     "-map", "0:v:0", "-map", "0:a:0?", ...codec, ...(frames||padBefore||padAfter?["-af",`adelay=${Math.round(padBefore*1000)}:all=1,apad`]:[]), ...(frames?["-frames:v",String(frames)]:[]), "-movflags", "+faststart", out,
-  ]);
-  if (code !== 0) throw new Error("FFmpeg could not cut this clip.");
+  ],"FFmpeg could not cut this clip. The recording may use an unsupported or damaged video codec.");
 }
 
 export async function exportClip(file: File, start: number, duration: number): Promise<Blob> {
@@ -196,7 +216,7 @@ export async function exportClip(file: File, start: number, duration: number): P
     await cut(ff, path, start, duration, "/clip.mp4");
     const data = (await ff.readFile("/clip.mp4")) as Uint8Array;
     await ff.deleteFile("/clip.mp4");
-    return new Blob([data.slice()], { type: "video/mp4" });
+    return new Blob([data as Uint8Array<ArrayBuffer>], { type: "video/mp4" });
   });
 }
 
@@ -205,11 +225,11 @@ export async function exportClip(file: File, start: number, duration: number): P
  * soon as it is cut and read back from there for the join, so the engine never holds more than one
  * piece plus the finished video, and it is shut down afterwards to give that memory back.
  */
-export async function exportReel(
+async function exportReelAttempt(
   file: File,
   clips: ReelRange[],
   onProgress?: (fraction: number) => void,
-  { precise = false, preview = false, frameCounts }: { precise?: boolean;preview?:boolean;frameCounts?:number[] } = {},
+  { precise = false, preview = false, frameCounts, lowMemory = false }: { precise?: boolean;preview?:boolean;frameCounts?:number[];lowMemory?:boolean } = {},
 ): Promise<Blob> {
   const token = generation;
   try {
@@ -217,30 +237,40 @@ export async function exportReel(
     if(frameCounts&&(frameCounts.length!==clips.length||frameCounts.some(n=>!Number.isInteger(n)||n<=0)))throw new Error("Invalid beat timing.");
     if(!clips.length)throw new Error("Select at least one clip to export.");
     if(clips.length===1)return await withFile(file,async(ff,path)=>{
-      await cut(ff,path,clips[0].start,clips[0].end-clips[0].start,"/reel.mp4",precise||preview||!!frameCounts,preview?480:720,frameCounts?.[0],clips[0].padBefore,clips[0].padAfter);
+      await cut(ff,path,clips[0].start,clips[0].end-clips[0].start,"/reel.mp4",precise||preview||lowMemory||!!frameCounts,preview||lowMemory?480:720,frameCounts?.[0],clips[0].padBefore,clips[0].padAfter);
       const data=await ff.readFile("/reel.mp4") as Uint8Array;
-      const blob=new Blob([data.slice()],{type:"video/mp4"});
+      const blob=new Blob([data as Uint8Array<ArrayBuffer>],{type:"video/mp4"});
       await ff.deleteFile("/reel.mp4");onProgress?.(1);return blob;
     },true);
-    const parts = await withFile(file, async (ff, path) => {
-      const out: { name: string; data: Blob }[] = [];
-      for (let k = 0; k < clips.length; k++) {
-        await cut(ff, path, clips[k].start, clips[k].end - clips[k].start, "/part.mp4", precise||preview||!!frameCounts,preview?480:720,frameCounts?.[k],clips[k].padBefore,clips[k].padAfter);
-        const data = (await ff.readFile("/part.mp4")) as Uint8Array;
-        await ff.deleteFile("/part.mp4");
-        out.push({ name: `p${k}.mp4`, data: new Blob([data.slice()], { type: "video/mp4" }) });
-        onProgress?.((k + 1) / (clips.length + 1));
+    const parts: {name:string;data:Blob}[]=[];
+    // Bound each worker's lifetime. WASM's high-water memory is returned between batches,
+    // and the final join starts without the source decoder's frame buffers still allocated.
+    for(let from=0;from<clips.length;){
+      let to=from, seconds=0;
+      while(to<clips.length&&to-from<8){
+        const next=frameCounts?frameCounts[to]/30:clips[to].end-clips[to].start;
+        if(to>from&&seconds+next>30)break;
+        seconds+=next;to++;
       }
-      return out;
-    });
+      await withFile(file,async(ff,path)=>{
+        for(let k=from;k<to;k++){
+          await cut(ff,path,clips[k].start,clips[k].end-clips[k].start,"/part.mp4",precise||preview||lowMemory||!!frameCounts,preview||lowMemory?480:720,frameCounts?.[k],clips[k].padBefore,clips[k].padAfter);
+          const data=await ff.readFile("/part.mp4") as Uint8Array<ArrayBuffer>;
+          await ff.deleteFile("/part.mp4");
+          parts.push({name:`p${k}.mp4`,data:new Blob([data],{type:"video/mp4"})});
+          onProgress?.((k+1)/(clips.length+1));
+        }
+      },true);
+      if(token!==generation)throw new DOMException("Video processing canceled.","AbortError");
+      from=to;
+    }
     if (token !== generation) throw new DOMException("Video processing canceled.", "AbortError");
     return await withMount(
       "/parts",
       { blobs: parts },
       async (ff) => {
         await ff.writeFile("/list.txt", parts.map((p,i) => `file '/parts/${p.name}'${frameCounts?`\nduration ${(frameCounts[i]/30).toFixed(9)}`:""}`).join("\n"));
-        const code = await ff.exec(["-f", "concat", "-safe", "0", "-i", "/list.txt", ...(frameCounts?["-c:v","copy","-c:a","aac","-af","aresample=async=1:first_pts=0","-t",String(frameCounts.reduce((n,v)=>n+v,0)/30)]:["-c","copy"]), "-movflags", "+faststart", "/reel.mp4"]);
-        if (code !== 0) throw new Error("FFmpeg could not join the clips.");
+        await execute(ff,["-threads", "1", "-filter_threads", "1", "-f", "concat", "-safe", "0", "-i", "/list.txt", ...(frameCounts?["-c:v","copy","-c:a","aac","-af","aresample=async=1:first_pts=0","-t",String(frameCounts.reduce((n,v)=>n+v,0)/30)]:["-c","copy"]), "-movflags", "+faststart", "/reel.mp4"],"FFmpeg could not join the clips.");
         const data = (await ff.readFile("/reel.mp4")) as Uint8Array<ArrayBuffer>;
         onProgress?.(1);
         const blob = new Blob([data], { type: "video/mp4" });
@@ -251,8 +281,26 @@ export async function exportReel(
       true,
     );
   } catch (err) {
-    throw friendly(err);
+    throw err;
   }
+}
+
+export async function exportReel(file:File,clips:ReelRange[],onProgress?:(fraction:number)=>void,
+ options:{precise?:boolean;preview?:boolean;frameCounts?:number[];onStatus?:(message:string)=>void}={}):Promise<Blob>{
+ const token=generation;
+ try{
+  return await exportReelAttempt(file,clips,onProgress,options);
+ }catch(err){
+  if(token!==generation)throw new DOMException("Video processing canceled.","AbortError");
+  if(!recoverable(err))throw friendly(err);
+  // Retry the entire selection consistently at 480p, rather than dropping failing clips
+  // or joining parts with incompatible dimensions. A cancellation never retries.
+  options.onStatus?.("Retrying at 480p with lower memory use. All selected clips are kept.");
+  onProgress?.(0);
+  if(token!==generation)throw new DOMException("Video processing canceled.","AbortError");
+  try{return await exportReelAttempt(file,clips,onProgress,{...options,precise:true,lowMemory:true});}
+  catch(retry){throw friendly(retry);}
+ }
 }
 
 /** Rough size of a highlights video, used to split one that would not fit in memory. */

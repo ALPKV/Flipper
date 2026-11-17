@@ -41,10 +41,12 @@ export function Highlights() {
   const [previewing,setPreviewing]=useState(false);
   const [beatMode,setBeatMode]=useState(false),[bpmText,setBpmText]=useState("120"),[beats,setBeats]=useState(4);
   const [sideText,setSideText]=useState("1.5"),[offsetText,setOffsetText]=useState("0"),[visibleCount,setVisibleCount]=useState(100);
+  const [echoGapText,setEchoGapText]=useState("0.6");
   const bpm=Number(bpmText);
   const validBpm=Number.isFinite(bpm)&&bpm>=40&&bpm<=240;
   const [exporting, setExporting] = useState(false);
   const [progress, setProgress] = useState(0);
+  const [exportStatus,setExportStatus]=useState("Creating MP4");
   const [error, setError] = useState<string | null>(null);
   const [quality,setQuality]=useState<ExportQuality>("compact");
   const [undo,setUndo]=useState<string|null>(null);
@@ -92,10 +94,11 @@ export function Highlights() {
   async function build(single?: (typeof v.clips)[number]) {
     if(previewing)return;
     const token = ++generation.current;
-    setExporting(true); setProgress(0); setError(null);
+    v.playerRef.current?.pause();
+    setExporting(true); setProgress(0); setError(null); setExportStatus("Creating MP4"); setOutput(null);
     try {
       const beatCut=single&&beatMode?beatPlan.cuts.find(c=>c.id===single.id):undefined;
-      const blob = await exportReel(file, single?[beatCut??single]:ranges, p=>{if(generation.current===token)setProgress(p);}, {precise: plan.precise,frameCounts:single?(beatCut?[beatCut.frames]:undefined):frameCounts});
+      const blob = await exportReel(file, single?[beatCut??single]:ranges, p=>{if(generation.current===token)setProgress(p);}, {onStatus:message=>{if(generation.current===token)setExportStatus(message);},precise: plan.precise,frameCounts:single?(beatCut?[beatCut.frames]:undefined):frameCounts});
       if (generation.current === token) setOutput({blob,url:URL.createObjectURL(blob),signature:single?`single:${single.id}|${signature}`:signature,name:`${file.name.replace(/\.[^.]+$/,"")}_${single?"clip_"+single.id:"highlights"}.mp4`});
     } catch(err) { if(generation.current===token)setError(err instanceof Error?err.message:"Export failed."); }
     finally { if(generation.current===token)setExporting(false); }
@@ -107,7 +110,7 @@ export function Highlights() {
         <ReelPreview key={signature} file={file} ranges={ranges} frameCounts={frameCounts} blockedReason={beatMode&&!validBpm?"Enter a tempo between 40 and 240 BPM.":beatMode&&!beatReady?"Reading the recording duration. Clips will be ready after sound analysis.":pending?`Sound analysis is still running (${Math.round(v.audio.progress*100)}%). Preview will be ready when it finishes.`:exporting?"An export is running. Finish or cancel it before preparing a preview.":null} onBusy={setPreviewing}/>
         <details className="editor-source" open={sourceOpen} onToggle={e=>setSourceOpen(e.currentTarget.open)}><summary>Original recording & frame controls</summary><div className="border-t border-line">        <Stage clip={v.clips.find(c=>c.id===v.selectedId)??null} showAnalysis={false}/></div></details>
         <Panel title="Clips" action={<Button size="sm" tone="ghost" onClick={()=>setShowAll(!showAll)}>{showAll?"Show chosen":"Show all candidates"}</Button>}>
-          <p className="mb-3 text-sm text-slate">{selected.length} of {v.clips.length} clips selected. All sounds and overlaps are kept unless you exclude them.</p>
+          <p className="mb-3 text-sm text-slate">{selected.length} of {v.clips.length} clips selected. Nearby echoes are combined when enabled; separate clips may overlap.</p>
           <div className="mb-3 flex flex-wrap gap-2">
             <Button size="sm" tone="ghost" disabled={locked} onClick={()=>{v.clips.forEach(c=>rememberRejection(file,c.id,true));setSkip(new Set());setPinned(new Set(v.clips.map(c=>c.id)));}}>Select all</Button>
             <Button size="sm" tone="ghost" disabled={locked} onClick={()=>setSkip(new Set(v.clips.map(c=>c.id)))}>Select none</Button>
@@ -135,11 +138,12 @@ export function Highlights() {
           </div>:<p className="mt-3 text-sm text-slate">Keep the buildup and follow-through around each sound.</p>}
         </Panel>
         <Panel title="Cut timing">
-          <p className="text-sm text-slate">Keep every detection. Overlapping footage stays in your reel.</p>
+          <p className="text-sm text-slate">Separate hits keep their own clips, even when footage overlaps.</p>
           {!beatMode?<label className="mt-4 block text-sm">Seconds each side of the sound<input aria-label="Seconds each side of the sound" className="field mt-1" type="number" min="0.1" max="15" step="0.05" disabled={locked} value={sideText} onChange={e=>{const text=e.target.value;setSideText(text);const n=Number(text);if(text!==""&&Number.isFinite(n)&&n>=.1&&n<=15)v.setSettings({...v.settings,leadIn:n,length:2*n});}} onBlur={()=>setSideText(String(v.settings.leadIn))}/><span className="mt-2 block text-xs text-mute">{v.settings.length.toFixed(2)}s total · equal buildup and follow-through. Recording edges use available footage.</span></label>:<p className="mt-3 text-sm">Your BPM sets equal time before and after each sound. Edge clips use held frames; no clips are dropped.</p>}
           <label className="mt-4 block text-sm">Offset (seconds)<input aria-label="Offset (seconds)" className="field mt-1" type="number" min="-15" max="15" step="0.05" disabled={locked} value={offsetText} onChange={e=>{const text=e.target.value;setOffsetText(text);const n=Number(text);if(text!==""&&Number.isFinite(n)&&n>=-15&&n<=15)v.setSettings({...v.settings,offset:n});}} onBlur={()=>setOffsetText(String(v.settings.offset))}/></label>
           <p className="mt-2 text-xs text-mute">Move cuts later (+) or earlier (−). For machine noise 1s before the hit, try +1.00 and reduce the time each side to leave the machine noise out.</p>
-          <p className="mt-3 text-sm">No automatic filtering or skipped clips.</p>
+          <label className="mt-4 flex items-start gap-2 text-sm"><input className="mt-1" type="checkbox" checked={v.settings.groupEchoes} disabled={locked} onChange={e=>v.setSettings({...v.settings,groupEchoes:e.target.checked})}/><span>Combine nearby sound echoes<span className="mt-1 block text-xs text-mute">Keep the strongest sound and combine nearby detections. Turn off to restore every detection. Manual clips stay separate.</span></span></label>
+          {v.settings.groupEchoes?<label className="mt-3 block text-sm">Combine repeats within (seconds)<input aria-label="Combine repeats within (seconds)" className="field mt-1" type="number" min="0.1" max="3" step="0.1" disabled={locked} value={echoGapText} onChange={e=>{const text=e.target.value;setEchoGapText(text);const n=Number(text);if(text!==""&&Number.isFinite(n)&&n>=.1&&n<=3)v.setSettings({...v.settings,echoGap:n});}} onBlur={()=>setEchoGapText(String(v.settings.echoGap))}/><span className="mt-1 block text-xs text-mute">Increase if one hit still creates several clips. A larger value may also combine separate nearby hits.</span></label>:null}
           {audioRunning ? <div role="status" className="mt-3"><p className="mb-2 text-sm">Checking sound · {Math.round(v.audio.progress*100)}%</p><Meter value={v.audio.progress} max={1}/></div> : null}
           {v.audio.error ? <p role="alert" className="mt-3 text-sm text-risk">{v.audio.error}</p> : null}
 
@@ -150,7 +154,7 @@ export function Highlights() {
           <label className="mt-4 block text-sm">Export quality<select aria-label="Export quality" className="field mt-1" disabled={locked||beatMode} value={beatMode?"compact":quality} onChange={e=>setQuality(e.target.value as ExportQuality)}><option value="compact">Smaller 720p — exact cuts</option><option value="auto">Recommended — one file</option><option value="original">Original quality — faster</option></select></label>
           <p className="mt-2 text-xs text-mute">Estimated size: {Math.ceil(plan.estimatedBytes/1e6)} MB. {beatMode?"Beat mode always uses exact 30 fps cuts.":"Original-quality cuts may include extra footage near keyframes."}</p>
           <Button className="mt-4 w-full" tone="gold" disabled={pending || locked || !beatReady || !ranges.length || !plan.fits} onClick={()=>void build()}>{exporting?"Making your reel…":"Create highlights"}</Button>
-          <p role="status" className="mt-2 text-xs text-mute">{exporting?`Creating MP4 · ${Math.round(progress*100)}%`:engineState}</p>
+          <p role="status" className="mt-2 text-xs text-mute">{exporting?`${exportStatus} · ${Math.round(progress*100)}%`:engineState}</p>
           {exporting ? <div className="mt-3"><Meter value={progress} max={1}/><Button className="mt-2" size="sm" tone="ghost" onClick={()=>{generation.current++;releaseEngine();setExporting(false);setError("Export canceled. Your choices are still here.");}}>Cancel export</Button></div> : null}
           {!plan.fits ? <p className="mt-3 text-sm text-risk">This output exceeds this device&apos;s memory budget. Exclude some candidates before exporting.</p> : null}
           {error ? <p role="alert" className="mt-3 text-sm text-risk">{error}</p> : null}

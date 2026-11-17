@@ -1,6 +1,7 @@
 "use client";
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
+import {groupImpacts} from "@/lib/video/impact-groups";
 import {recordingMetadata} from "@/lib/video/recording-metadata";
 import type { BallAnalysis } from "@/lib/tracking/analyze";
 import { coverage, type ScanResult } from "@/lib/tracking/visual-deliveries";
@@ -28,6 +29,8 @@ export type ClipSettings = {
   /** After a clip, sounds within this many seconds are skipped (back-to-back noise from the same ball). */
   gap: number;
   offset:number;
+  groupEchoes:boolean;
+  echoGap:number;
   leadIn: number;
   length: number;
 };
@@ -105,7 +108,7 @@ export function useVideo(): Ctx {
   return v;
 }
 
-const DEFAULT_SETTINGS: ClipSettings = { timing: NORMAL_TIMING, threshold: -120, noisy: false, visual: false, motionSensitivity: .012, gap: 3, offset:0, leadIn: 1.5, length: 3 };
+const DEFAULT_SETTINGS: ClipSettings = { timing: NORMAL_TIMING, threshold: -120, noisy: false, visual: false, motionSensitivity: .012, gap: 3, offset:0, groupEchoes:true, echoGap:.6, leadIn: 1.5, length: 3 };
 const DEFAULT_TRACKING: TrackingSetup = { ...DEFAULT_SETUP, stumps: null };
 
 const emptyMarks = (): Marks => ({
@@ -282,8 +285,8 @@ export function VideoProvider({ children }: { children: React.ReactNode }) {
   },[settings.timing]);
 
   const deliveries = useMemo<Delivery[]>(() => {
-    return sounds ? soundEvents(sounds) : [];
-  }, [sounds]);
+    return sounds ? soundEvents(settings.groupEchoes?groupImpacts(sounds,settings.echoGap):sounds) : [];
+  }, [sounds,settings.groupEchoes,settings.echoGap]);
 
   const clips: Clip[] = useMemo(() => {
     const duration = meta?.duration ?? Infinity;
