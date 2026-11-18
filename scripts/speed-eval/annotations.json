@@ -1,0 +1,697 @@
+{
+ "about": "Hand annotations for the offline Speed Check evaluation. Coordinates are pixels in frames scaled to a 1280-pixel long side; times are the source file's presentation timestamps (s). Ball positions were checked by eye on full-resolution crops; where the tracker proposed a point, it is listed only if it visibly sat on the ball (within ~2 px). No radar or other speed reference exists for any clip. Splits: 'tune' was used to design the tracker; 'dev' deliveries were first a holdout for v1, then used to fix v1's failures (so they are no longer independent); 'holdout' was annotated and evaluated only with the frozen final tracker.",
+ "sessions": {
+  "netsA": {
+   "video": "TSIL5070.MOV",
+   "audio": "netsA",
+   "farStumps": {
+    "base": [
+     330,
+     663
+    ],
+    "top": [
+     330,
+     635
+    ]
+   },
+   "pitchM": 20.12,
+   "cameraBehindM": [
+    1,
+    6
+   ],
+   "note": "Outdoor grass nets, iPhone HEVC 1080x1920, 24 fps content in a 30 fps file (every fifth frame repeated, one dropped frame). Pitch length NOT measured; 20.12 m is what a user would confirm for a full pitch."
+  },
+  "netsB": {
+   "video": "copy_94366F27-82F9-47AA-8EB0-13AB93374EAC.mov",
+   "audio": "netsB",
+   "farStumps": {
+    "base": [
+     365,
+     757
+    ],
+    "top": [
+     365,
+     698
+    ]
+   },
+   "pitchM": 20.12,
+   "cameraBehindM": [
+    0.5,
+    3
+   ],
+   "note": "Indoor turf nets, camera just behind the bowler's stumps; the bowler's arm is out of frame at release. 24 fps content in a 30 fps file."
+  }
+ },
+ "deliveries": [
+  {
+   "id": "A02",
+   "clip": "A02",
+   "session": "netsA",
+   "split": "tune",
+   "handVisible": true,
+   "lastInHand": 9.0,
+   "firstFree": 9.033,
+   "firstFreeXY": [
+    291,
+    525
+   ],
+   "ball": [
+    [
+     9.033,
+     291,
+     525
+    ],
+    [
+     9.067,
+     292,
+     525
+    ],
+    [
+     9.1,
+     297,
+     531
+    ],
+    [
+     9.133,
+     301,
+     540
+    ],
+    [
+     9.167,
+     304,
+     549
+    ],
+    [
+     9.2,
+     308,
+     557
+    ],
+    [
+     9.267,
+     311,
+     565
+    ],
+    [
+     9.3,
+     313,
+     574
+    ],
+    [
+     9.333,
+     314,
+     585
+    ],
+    [
+     9.367,
+     317,
+     593
+    ]
+   ],
+   "lastSeen": 9.367,
+   "reachesBatter": false,
+   "contact": "bat-occluded",
+   "expected": "refuse",
+   "note": "Bowler's follow-through hides the ball and batter from 9.4 s. The only nearby sound (9.38 s) would imply ~167 km/h.",
+   "occluded": [
+    9.4,
+    9.433,
+    9.467,
+    9.5
+   ]
+  },
+  {
+   "id": "B01",
+   "clip": "B01",
+   "session": "netsB",
+   "split": "tune",
+   "handVisible": false,
+   "ball": [
+    [
+     1.233,
+     148,
+     534
+    ],
+    [
+     1.267,
+     170,
+     592
+    ],
+    [
+     1.3,
+     187,
+     644
+    ],
+    [
+     1.333,
+     202,
+     690
+    ],
+    [
+     1.4,
+     216,
+     735
+    ],
+    [
+     1.433,
+     228,
+     776
+    ],
+    [
+     1.467,
+     237,
+     812
+    ],
+    [
+     1.5,
+     240,
+     785
+    ],
+    [
+     1.567,
+     241,
+     754
+    ],
+    [
+     1.6,
+     243,
+     729
+    ],
+    [
+     1.633,
+     244,
+     708
+    ],
+    [
+     1.667,
+     245,
+     691
+    ],
+    [
+     1.733,
+     246,
+     679
+    ]
+   ],
+   "lastSeen": 1.767,
+   "reachesBatter": true,
+   "contact": "bat-visible",
+   "contactFrames": [
+    1.767,
+    1.833
+   ],
+   "expected": "refuse",
+   "note": "Ball enters the picture already in flight from the left; the release is out of view. Bounce between 1.467 and 1.5 s.",
+   "occluded": []
+  },
+  {
+   "id": "A03",
+   "clip": "A03",
+   "session": "netsA",
+   "split": "dev",
+   "handVisible": true,
+   "lastInHand": 12.533,
+   "firstFree": 12.567,
+   "firstFreeXY": [
+    275,
+    523
+   ],
+   "ball": [
+    [
+     12.567,
+     275,
+     523
+    ],
+    [
+     12.6,
+     280,
+     529
+    ],
+    [
+     12.633,
+     285,
+     535
+    ],
+    [
+     12.7,
+     288,
+     543
+    ],
+    [
+     12.733,
+     291,
+     551
+    ],
+    [
+     12.767,
+     294,
+     560
+    ],
+    [
+     12.8,
+     296,
+     568
+    ],
+    [
+     12.867,
+     298,
+     578
+    ]
+   ],
+   "occluded": [
+    12.9,
+    12.933,
+    12.967,
+    13.0
+   ],
+   "lastSeen": 12.867,
+   "reachesBatter": false,
+   "contact": "bat-occluded",
+   "expected": "refuse",
+   "note": "At 12.533 s the ball still rests on the fingertips. Ball goes behind the bowler's head from 12.9 s."
+  },
+  {
+   "id": "A05",
+   "clip": "A05",
+   "session": "netsA",
+   "split": "dev",
+   "handVisible": true,
+   "lastInHand": 19.833,
+   "firstFree": 19.867,
+   "firstFreeXY": [
+    302,
+    512
+   ],
+   "ball": [
+    [
+     19.867,
+     302,
+     512
+    ],
+    [
+     19.9,
+     309,
+     513
+    ],
+    [
+     19.933,
+     315,
+     515
+    ],
+    [
+     19.967,
+     319,
+     520
+    ],
+    [
+     20.033,
+     323,
+     525
+    ],
+    [
+     20.067,
+     327,
+     531
+    ],
+    [
+     20.1,
+     330,
+     538
+    ],
+    [
+     20.133,
+     332,
+     545
+    ],
+    [
+     20.2,
+     334,
+     553
+    ],
+    [
+     20.233,
+     337,
+     562
+    ],
+    [
+     20.267,
+     338,
+     570
+    ],
+    [
+     20.3,
+     340,
+     579
+    ],
+    [
+     20.433,
+     344,
+     607
+    ]
+   ],
+   "occluded": [
+    20.467,
+    20.5,
+    20.533,
+    20.567,
+    20.6
+   ],
+   "lastSeen": 20.433,
+   "reachesBatter": false,
+   "contact": "bat-occluded",
+   "expected": "refuse",
+   "note": "Ball clearly free and large at 19.867 and 19.9 s. Hidden behind the bowler from 20.467 s."
+  },
+  {
+   "id": "A07",
+   "clip": "A07",
+   "session": "netsA",
+   "split": "dev",
+   "handVisible": true,
+   "lastInHand": 26.933,
+   "firstFree": 26.967,
+   "firstFreeXY": [
+    305,
+    552
+   ],
+   "ball": [
+    [
+     26.967,
+     305,
+     552
+    ],
+    [
+     27.033,
+     312,
+     561
+    ],
+    [
+     27.067,
+     317,
+     570
+    ],
+    [
+     27.1,
+     321,
+     580
+    ],
+    [
+     27.133,
+     325,
+     590
+    ],
+    [
+     27.2,
+     328,
+     600
+    ],
+    [
+     27.233,
+     332,
+     611
+    ],
+    [
+     27.267,
+     334,
+     621
+    ]
+   ],
+   "occluded": [
+    27.4,
+    27.433,
+    27.467
+   ],
+   "lastSeen": 27.267,
+   "reachesBatter": false,
+   "contact": "bat-occluded",
+   "expected": "refuse",
+   "note": "Ball not clearly identifiable after 27.267 s (near the batter's helmet, then behind the bowler). No contact sound near arrival."
+  },
+  {
+   "id": "A09",
+   "clip": "A09",
+   "session": "netsA",
+   "split": "dev",
+   "handVisible": true,
+   "firstFree": 33.867,
+   "firstFreeXY": [
+    293,
+    513
+   ],
+   "ball": [
+    [
+     33.933,
+     299,
+     519
+    ],
+    [
+     33.967,
+     303,
+     525
+    ],
+    [
+     34.0,
+     307,
+     532
+    ],
+    [
+     34.033,
+     310,
+     539
+    ],
+    [
+     34.067,
+     313,
+     546
+    ],
+    [
+     34.133,
+     315,
+     554
+    ],
+    [
+     34.167,
+     317,
+     563
+    ],
+    [
+     34.2,
+     319,
+     571
+    ]
+   ],
+   "occluded": [
+    34.3,
+    34.333,
+    34.367,
+    34.4
+   ],
+   "lastSeen": 34.267,
+   "reachesBatter": false,
+   "contact": "bat-occluded",
+   "expected": "refuse",
+   "note": "Ball already free at 33.867 s (first frame reviewed), so the true release is at or before that frame. It barely moves on screen until 33.933 s."
+  },
+  {
+   "id": "A10",
+   "clip": "A10",
+   "session": "netsA",
+   "split": "dev",
+   "handVisible": true,
+   "lastInHand": 36.9,
+   "firstFree": 36.933,
+   "firstFreeXY": [
+    299,
+    528
+   ],
+   "ball": [
+    [
+     36.933,
+     299,
+     528
+    ],
+    [
+     36.967,
+     305,
+     533
+    ],
+    [
+     37.0,
+     310,
+     539
+    ],
+    [
+     37.067,
+     315,
+     546
+    ],
+    [
+     37.1,
+     318,
+     553
+    ],
+    [
+     37.133,
+     322,
+     560
+    ],
+    [
+     37.167,
+     324,
+     568
+    ],
+    [
+     37.233,
+     327,
+     577
+    ]
+   ],
+   "occluded": [
+    37.3,
+    37.333,
+    37.367
+   ],
+   "lastSeen": 37.233,
+   "reachesBatter": false,
+   "contact": "bat-occluded",
+   "expected": "refuse",
+   "note": "Hidden behind the bowler's head after 37.233 s."
+  },
+  {
+   "id": "A11",
+   "clip": "A11",
+   "session": "netsA",
+   "split": "holdout",
+   "handVisible": true,
+   "lastInHand": 40.3,
+   "firstFree": 40.333,
+   "firstFreeXY": [
+    293,
+    520
+   ],
+   "ball": [
+    [
+     40.333,
+     293,
+     520
+    ],
+    [
+     40.367,
+     298,
+     523
+    ],
+    [
+     40.433,
+     302,
+     528
+    ],
+    [
+     40.467,
+     305,
+     534
+    ],
+    [
+     40.5,
+     309,
+     540
+    ],
+    [
+     40.533,
+     311,
+     547
+    ],
+    [
+     40.6,
+     314,
+     555
+    ],
+    [
+     40.633,
+     316,
+     563
+    ],
+    [
+     40.667,
+     318,
+     571
+    ]
+   ],
+   "occluded": [
+    40.7,
+    40.733,
+    40.767,
+    40.8
+   ],
+   "lastSeen": 40.667,
+   "reachesBatter": false,
+   "contact": "bat-occluded",
+   "expected": "refuse",
+   "note": "Hidden behind the bowler's head from 40.7 s."
+  },
+  {
+   "id": "A12",
+   "clip": "A12",
+   "session": "netsA",
+   "split": "holdout",
+   "handVisible": true,
+   "lastInHand": 43.633,
+   "firstFree": 43.667,
+   "firstFreeXY": [
+    279,
+    517
+   ],
+   "ball": [
+    [
+     43.7,
+     285,
+     523
+    ],
+    [
+     43.733,
+     289,
+     527
+    ],
+    [
+     43.8,
+     292,
+     533
+    ],
+    [
+     43.833,
+     295,
+     539
+    ],
+    [
+     43.867,
+     298,
+     546
+    ],
+    [
+     43.9,
+     300,
+     554
+    ],
+    [
+     43.967,
+     302,
+     562
+    ],
+    [
+     44.0,
+     304,
+     570
+    ],
+    [
+     44.033,
+     305,
+     579
+    ]
+   ],
+   "occluded": [],
+   "lastSeen": 44.1,
+   "reachesBatter": false,
+   "contact": "bat-occluded",
+   "expected": "refuse",
+   "note": "Ball still visible at 44.1 s above the bowler's head, then hidden."
+  }
+ ]
+}

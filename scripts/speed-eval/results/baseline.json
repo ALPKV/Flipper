@@ -1,0 +1,593 @@
+{
+ "A01": {
+  "contact": 1.5851875,
+  "release": null,
+  "points": [
+   {
+    "t": 1.266667,
+    "x": 291.7142857142857,
+    "y": 518.6666666666666
+   },
+   {
+    "t": 1.3,
+    "x": 298.8235294117647,
+    "y": 524.8235294117648
+   },
+   {
+    "t": 1.333333,
+    "x": 305,
+    "y": 532
+   },
+   {
+    "t": 1.433333,
+    "x": 315.0769230769231,
+    "y": 547.6923076923077
+   },
+   {
+    "t": 1.466667,
+    "x": 318.8,
+    "y": 556
+   }
+  ],
+  "bounce": null,
+  "refused": "The incoming flight could not be measured reliably."
+ },
+ "A02": {
+  "refused": "No clear bat contact found."
+ },
+ "A03": {
+  "refused": "No clear bat contact found."
+ },
+ "A04": {
+  "refused": "No clear bat contact found."
+ },
+ "A05": {
+  "contact": 20.252042,
+  "release": null,
+  "points": [
+   {
+    "t": 19.7,
+    "x": 272.55555555555554,
+    "y": 617.7777777777778
+   },
+   {
+    "t": 19.766667,
+    "x": 291,
+    "y": 557
+   },
+   {
+    "t": 19.866667,
+    "x": 302.3333333333333,
+    "y": 511.66666666666674
+   },
+   {
+    "t": 19.9,
+    "x": 309.125,
+    "y": 511.75
+   },
+   {
+    "t": 19.933333,
+    "x": 314.7142857142857,
+    "y": 514.5714285714286
+   },
+   {
+    "t": 20.033333,
+    "x": 323,
+    "y": 524
+   },
+   {
+    "t": 20.066667,
+    "x": 326.4,
+    "y": 530
+   },
+   {
+    "t": 20.1,
+    "x": 329.3333333333333,
+    "y": 537.7777777777778
+   }
+  ],
+  "bounce": null,
+  "refused": "The incoming flight could not be measured reliably."
+ },
+ "A06": {
+  "refused": "No clear bat contact found."
+ },
+ "A07": {
+  "refused": "No clear bat contact found."
+ },
+ "A08": {
+  "contact": 31.1327295,
+  "release": null,
+  "points": [],
+  "bounce": null,
+  "refused": "The incoming flight could not be measured reliably."
+ },
+ "A09": {
+  "refused": "No clear bat contact found."
+ },
+ "A10": {
+  "refused": "No clear bat contact found."
+ },
+ "A11": {
+  "refused": "No clear bat contact found."
+ },
+ "A12": {
+  "refused": "No clear bat contact found."
+ },
+ "A13": {
+  "refused": "No clear bat contact found."
+ },
+ "A14": {
+  "refused": "No clear bat contact found."
+ },
+ "A15": {
+  "refused": "No clear bat contact found."
+ },
+ "A16": {
+  "refused": "No clear bat contact found."
+ },
+ "A17": {
+  "contact": 61.717792,
+  "release": null,
+  "points": [],
+  "bounce": null,
+  "refused": "The incoming flight could not be measured reliably."
+ },
+ "A18": {
+  "contact": 64.412167,
+  "release": null,
+  "points": [],
+  "bounce": null,
+  "refused": "The incoming flight could not be measured reliably."
+ },
+ "A19": {
+  "refused": "No clear bat contact found."
+ },
+ "B01": {
+  "contact": 1.9083125,
+  "release": null,
+  "points": [
+   {
+    "t": 1.4,
+    "x": 215.06896551724137,
+    "y": 734.3448275862069
+   },
+   {
+    "t": 1.433333,
+    "x": 226.88888888888889,
+    "y": 775.1717171717172
+   },
+   {
+    "t": 1.466667,
+    "x": 236.8358208955224,
+    "y": 811.5820895522388
+   },
+   {
+    "t": 1.566667,
+    "x": 240.85245901639348,
+    "y": 753.4754098360655
+   },
+   {
+    "t": 1.6,
+    "x": 242.10169491525423,
+    "y": 728.1355932203389
+   }
+  ],
+  "bounce": null,
+  "refused": "The incoming flight could not be measured reliably."
+ },
+ "B02": {
+  "contact": 5.481292,
+  "release": null,
+  "points": [],
+  "bounce": null,
+  "refused": "The incoming flight could not be measured reliably."
+ },
+ "B03": {
+  "contact": 9.526062499999998,
+  "release": null,
+  "points": [],
+  "bounce": null,
+  "refused": "The incoming flight could not be measured reliably."
+ },
+ "B04": {
+  "contact": 13.272542,
+  "release": null,
+  "points": [
+   {
+    "t": 12.566667,
+    "x": 4,
+    "y": 162.4285714285714
+   },
+   {
+    "t": 12.666667,
+    "x": 101.48387096774194,
+    "y": 253.09677419354838
+   },
+   {
+    "t": 12.7,
+    "x": 134.425,
+    "y": 282.225
+   },
+   {
+    "t": 12.733333,
+    "x": 164.6315789473684,
+    "y": 315.7894736842105
+   },
+   {
+    "t": 12.833333,
+    "x": 211.56756756756758,
+    "y": 377.4594594594595
+   },
+   {
+    "t": 12.866667,
+    "x": 228.86486486486487,
+    "y": 406.37837837837833
+   },
+   {
+    "t": 12.9,
+    "x": 246.42105263157893,
+    "y": 437.05263157894734
+   },
+   {
+    "t": 13,
+    "x": 278.50666666666666,
+    "y": 488.45333333333326
+   },
+   {
+    "t": 13.033333,
+    "x": 292.46753246753246,
+    "y": 519.1428571428571
+   }
+  ],
+  "bounce": null,
+  "refused": "The incoming flight could not be measured reliably."
+ },
+ "B05": {
+  "refused": "No clear bat contact found."
+ },
+ "B06": {
+  "contact": 21.0581875,
+  "release": null,
+  "points": [],
+  "bounce": null,
+  "refused": "The incoming flight could not be measured reliably."
+ },
+ "B07": {
+  "contact": 24.940250000000002,
+  "release": null,
+  "points": [],
+  "bounce": null,
+  "refused": "The incoming flight could not be measured reliably."
+ },
+ "B08": {
+  "contact": 29.395625000000003,
+  "release": null,
+  "points": [],
+  "bounce": null,
+  "refused": "The incoming flight could not be measured reliably."
+ },
+ "B09": {
+  "contact": 32.374,
+  "release": null,
+  "points": [],
+  "bounce": null,
+  "refused": "The incoming flight could not be measured reliably."
+ },
+ "B10": {
+  "contact": 35.8045625,
+  "release": null,
+  "points": [],
+  "bounce": null,
+  "refused": "The incoming flight could not be measured reliably."
+ },
+ "B11": {
+  "contact": 38.8953125,
+  "release": null,
+  "points": [],
+  "bounce": null,
+  "refused": "The incoming flight could not be measured reliably."
+ },
+ "B12": {
+  "contact": 42.738625,
+  "release": null,
+  "points": [
+   {
+    "t": 42.066667,
+    "x": 15.571428571428571,
+    "y": 377.42857142857144
+   },
+   {
+    "t": 42.166667,
+    "x": 79.85714285714286,
+    "y": 461.42857142857144
+   },
+   {
+    "t": 42.2,
+    "x": 108.22222222222223,
+    "y": 494.074074074074
+   },
+   {
+    "t": 42.233333,
+    "x": 129.8135593220339,
+    "y": 531.4745762711865
+   },
+   {
+    "t": 42.333333,
+    "x": 164.21505376344086,
+    "y": 600.7741935483871
+   },
+   {
+    "t": 42.366667,
+    "x": 177.90243902439025,
+    "y": 633.780487804878
+   },
+   {
+    "t": 42.4,
+    "x": 189.45945945945945,
+    "y": 665.3783783783783
+   },
+   {
+    "t": 42.5,
+    "x": 209.375,
+    "y": 726.65625
+   }
+  ],
+  "bounce": null,
+  "refused": "The incoming flight could not be measured reliably."
+ },
+ "B13": {
+  "contact": 46.725125,
+  "release": null,
+  "points": [
+   {
+    "t": 46.166667,
+    "x": 149.02208201892745,
+    "y": 449.2429022082019
+   },
+   {
+    "t": 46.266667,
+    "x": 305.30232558139534,
+    "y": 374.79069767441854
+   },
+   {
+    "t": 46.3,
+    "x": 319.5483870967742,
+    "y": 401.48387096774195
+   },
+   {
+    "t": 46.333333,
+    "x": 334.8965517241379,
+    "y": 428.2068965517242
+   },
+   {
+    "t": 46.433333,
+    "x": 355.84,
+    "y": 473.92
+   },
+   {
+    "t": 46.466667,
+    "x": 365.2571428571429,
+    "y": 502.0571428571429
+   }
+  ],
+  "bounce": null,
+  "refused": "The incoming flight could not be measured reliably."
+ },
+ "B14": {
+  "contact": 50.3716875,
+  "release": null,
+  "points": [
+   {
+    "t": 49.8,
+    "x": 206.36686390532543,
+    "y": 597.6804733727811
+   },
+   {
+    "t": 49.833333,
+    "x": 229.93055555555557,
+    "y": 644.7777777777778
+   },
+   {
+    "t": 49.866667,
+    "x": 249.54198473282443,
+    "y": 688.2748091603054
+   },
+   {
+    "t": 49.966667,
+    "x": 280.9782608695652,
+    "y": 766.804347826087
+   },
+   {
+    "t": 50,
+    "x": 294.2682926829268,
+    "y": 804.0487804878048
+   }
+  ],
+  "bounce": null,
+  "refused": "The incoming flight could not be measured reliably."
+ },
+ "B15": {
+  "contact": 55.2323125,
+  "release": null,
+  "points": [
+   {
+    "t": 54.6,
+    "x": 163.88177339901478,
+    "y": 487.5566502463055
+   },
+   {
+    "t": 54.666667,
+    "x": 207.41095890410958,
+    "y": 581.5616438356165
+   },
+   {
+    "t": 54.766667,
+    "x": 239.6695652173913,
+    "y": 662.7652173913043
+   },
+   {
+    "t": 54.8,
+    "x": 252.92783505154642,
+    "y": 699.340206185567
+   },
+   {
+    "t": 54.833333,
+    "x": 264.8536585365854,
+    "y": 734.390243902439
+   }
+  ],
+  "bounce": null,
+  "refused": "The incoming flight could not be measured reliably."
+ },
+ "B16": {
+  "contact": 58.652375,
+  "release": null,
+  "points": [
+   {
+    "t": 58.266667,
+    "x": 17.402298850574713,
+    "y": 1008.6896551724137
+   },
+   {
+    "t": 58.366667,
+    "x": 183.44444444444446,
+    "y": 672.5555555555557
+   },
+   {
+    "t": 58.4,
+    "x": 189.82352941176472,
+    "y": 663.7647058823529
+   },
+   {
+    "t": 58.433333,
+    "x": 194.45454545454547,
+    "y": 658.7272727272727
+   },
+   {
+    "t": 58.533333,
+    "x": 205.52941176470588,
+    "y": 657.4117647058823
+   },
+   {
+    "t": 58.566667,
+    "x": 209.57142857142858,
+    "y": 660.8571428571429
+   }
+  ],
+  "bounce": {
+   "t": 58.4,
+   "x": 0.2636437908496732,
+   "y": 0.5185661764705882
+  },
+  "refused": "The incoming flight could not be measured reliably."
+ },
+ "B17": {
+  "contact": 62.1984375,
+  "release": 61.466667,
+  "points": [
+   {
+    "t": 61.466667,
+    "x": 243.09278350515464,
+    "y": 654.5360824742268
+   },
+   {
+    "t": 61.5,
+    "x": 258.5842696629214,
+    "y": 690.5393258426966
+   },
+   {
+    "t": 61.533333,
+    "x": 273.78823529411767,
+    "y": 728.3058823529411
+   },
+   {
+    "t": 61.633333,
+    "x": 300.53333333333336,
+    "y": 797.8666666666666
+   },
+   {
+    "t": 61.7,
+    "x": 302.5769230769231,
+    "y": 744.8076923076923
+   },
+   {
+    "t": 61.8,
+    "x": 303.8378378378378,
+    "y": 705.8918918918919
+   },
+   {
+    "t": 61.833333,
+    "x": 305,
+    "y": 691.2631578947369
+   },
+   {
+    "t": 61.866667,
+    "x": 306.42105263157896,
+    "y": 681.4736842105264
+   }
+  ],
+  "bounce": {
+   "t": 61.633333,
+   "x": 0.41740740740740745,
+   "y": 0.6233333333333333
+  },
+  "kmh": 95.71032086149667,
+  "low": 83.95587899914212,
+  "high": 110.3042574668152
+ },
+ "B18": {
+  "contact": 66.01650000000001,
+  "release": null,
+  "points": [],
+  "bounce": null,
+  "refused": "The incoming flight could not be measured reliably."
+ },
+ "B19": {
+  "contact": 69.81725,
+  "release": null,
+  "points": [
+   {
+    "t": 69.233333,
+    "x": 96.24561403508773,
+    "y": 328.56140350877195
+   },
+   {
+    "t": 69.266667,
+    "x": 131.54285714285714,
+    "y": 372.57142857142856
+   },
+   {
+    "t": 69.366667,
+    "x": 190.81632653061226,
+    "y": 445.51020408163265
+   },
+   {
+    "t": 69.4,
+    "x": 216.36363636363635,
+    "y": 486.0454545454546
+   },
+   {
+    "t": 69.433333,
+    "x": 235.77011494252875,
+    "y": 522.3218390804598
+   }
+  ],
+  "bounce": null,
+  "refused": "The incoming flight could not be measured reliably."
+ },
+ "B20": {
+  "contact": 72.9500625,
+  "release": null,
+  "points": [],
+  "bounce": null,
+  "refused": "The incoming flight could not be measured reliably."
+ },
+ "B21": {
+  "contact": 77.26775,
+  "release": null,
+  "points": [],
+  "bounce": null,
+  "refused": "The incoming flight could not be measured reliably."
+ }
+}

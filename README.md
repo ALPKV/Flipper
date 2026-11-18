@@ -51,7 +51,9 @@ an immediate guard prevents a repeated Export invocation from queuing another jo
 ## Experimental tools retained in the repo
 
 `lib/features.ts` contains the single `EXPERIMENTAL_FEATURES = false` switch. Speed Check shows
-an **In progress** page in production. The retained Speed Check/Ball Tracking components and
+an **In progress** page in production; its rebuilt release-to-bat measurement (see
+`SPEED-CHECK.md`) can be tried locally with `NEXT_PUBLIC_SPEED_CHECK=1`. It reports an average
+speed with a range, or a specific refusal, and is not validated against radar. The retained Speed Check/Ball Tracking components and
 provider tracking entry points are gated by that switch; no tracking code was deleted. Tracking
 and speed remain unvalidated timing estimates, not radar or calibrated 3D measurements.
 

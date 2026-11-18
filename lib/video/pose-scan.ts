@@ -16,3 +16,18 @@ export function scanPoses(file:File,signal:AbortSignal,progress:(p:number,phase:
     signal.addEventListener("abort",abort,{once:true});reset();worker.postMessage({file,factor,hz});
   });
 }
+
+export type PoseAt={frames:{t:number;people:{wrists:{x:number;y:number;visibility:number}[];torso:number}[]}[]};
+/** Wrist positions at the given video timestamps (0-1 display coordinates). Runs locally in a worker. */
+export function posesAt(file:File,timestamps:number[],signal:AbortSignal):Promise<PoseAt>{
+  return new Promise((resolve,reject)=>{
+    if(signal.aborted){reject(new DOMException("Canceled","AbortError"));return;}
+    const worker=new Worker(new URL("./pose-worker.ts",import.meta.url),{type:"module"});
+    const timer=setTimeout(()=>finish(undefined,new Error("Pose check stalled.")),60000);
+    const finish=(result?:PoseAt,error?:Error)=>{clearTimeout(timer);signal.removeEventListener("abort",abort);worker.terminate();if(error)reject(error);else resolve(result!);};
+    const abort=()=>finish(undefined,new DOMException("Canceled","AbortError"));
+    worker.onmessage=({data})=>{if(data.error)finish(undefined,new Error(data.error));else if(data.result)finish(data.result);};
+    worker.onerror=event=>finish(undefined,new Error(event.message||"The pose worker could not start."));
+    signal.addEventListener("abort",abort,{once:true});worker.postMessage({file,factor:1,hz:1,at:timestamps});
+  });
+}

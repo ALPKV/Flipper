@@ -83,20 +83,20 @@ export async function scanFileMotion(file: File, signal: AbortSignal, progress: 
 }
 
 /** Real presentation timestamps; no guessed frame rate or duplicated seek frames. */
-export async function flightFrames(file: File, start: number, end: number, signal: AbortSignal, progress: (p: number) => void) {
+export async function flightFrames(file: File, start: number, end: number, signal: AbortSignal, progress: (p: number) => void, longSide = 640, maxFrames = 900) {
   const input = open(file);
   const abort = () => input.dispose();
   signal.addEventListener("abort", abort, { once: true });
   try {
     const track = await input.getPrimaryVideoTrack();
     if (!track || !await track.canDecode()) throw new Error("This browser cannot decode the clip. Try an H.264 MP4 in Chrome or Edge.");
-    const scale = Math.min(1, 640 / Math.max(track.displayWidth, track.displayHeight));
+    const scale = Math.min(1, longSide / Math.max(track.displayWidth, track.displayHeight));
     const w = Math.round(track.displayWidth * scale), h = Math.round(track.displayHeight * scale);
     const sink = new CanvasSink(track, { width: w, height: h, fit: "fill", poolSize: 1 });
     const frames: Gray[] = [], times: number[] = [];
     for await (const frame of sink.canvases(start, end)) {
       check(signal);
-      if (frames.length >= 900) throw new Error("Too many frames. Trim to one delivery at normal playback speed.");
+      if (frames.length >= maxFrames) throw new Error("Too many frames for this device's memory. Trim to one delivery, or use a lower frame rate.");
       const ctx = frame.canvas.getContext("2d") as CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D;
       frames.push(toGray(ctx.getImageData(0, 0, w, h).data, w, h));
       times.push(frame.timestamp);
