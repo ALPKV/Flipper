@@ -1,0 +1,926 @@
+{
+ "A02": {
+  "id": "A02",
+  "split": "tune",
+  "expected": "refuse",
+  "outcome": "refuse",
+  "correct": true,
+  "tracked": 7,
+  "bridged": 0,
+  "trackingCue": "pose-sim",
+  "recall": "7/10",
+  "medianErrPx": 1.16,
+  "maxErrPx": 1.3,
+  "wrongAssoc": 0,
+  "unverifiedPts": 0,
+  "releaseErrFrames": 1,
+  "falseArrival": false,
+  "speed": null,
+  "reason": "The ball was lost before it reached the batter (often hidden by the bowler's follow-through), so bat contact cannot be linked to it. Move the camera slightly higher or to one side.",
+  "ms": 488,
+  "points": [
+   [
+    9.066667,
+    292,
+    525,
+    1
+   ],
+   [
+    9.1,
+    296.7,
+    532.1,
+    1
+   ],
+   [
+    9.133333,
+    300.8,
+    539.7,
+    1
+   ],
+   [
+    9.166667,
+    304,
+    547.7,
+    1
+   ],
+   [
+    9.2,
+    307.2,
+    556,
+    1
+   ],
+   [
+    9.266667,
+    309.9,
+    564.8,
+    1
+   ],
+   [
+    9.3,
+    312.3,
+    573.2,
+    1
+   ]
+  ],
+  "checks": [
+   {
+    "id": "timing",
+    "label": "Frame timing",
+    "ok": true,
+    "detail": "5 repeated frames removed: the file was converted from about 26 fps. Unique frames re-timed evenly (moves frames by up to 27 ms)."
+   },
+   {
+    "id": "track",
+    "label": "Ball path",
+    "ok": true,
+    "detail": "7 frames with the ball seen."
+   },
+   {
+    "id": "release",
+    "label": "Release",
+    "ok": true,
+    "detail": "Ball first seen free at 9.067 s. Hand contact was not confirmed, so release is allowed anywhere from 100 ms before to one frame after."
+   },
+   {
+    "id": "arrival",
+    "label": "Reaches the batter",
+    "ok": false,
+    "detail": "Last seen at 9.300 s, short of the batter's end."
+   }
+  ],
+  "release": {
+   "bracket": [
+    8.9731092605042,
+    9.111688325439266
+   ],
+   "firstFreePts": 9.066667,
+   "prevPts": 9.033333,
+   "confirmed": false
+  },
+  "contact": null,
+  "cadence": [
+   "5 repeated frames removed: the file was converted from about 26 fps. Unique frames re-timed evenly (moves frames by up to 27 ms)."
+  ]
+ },
+ "B01": {
+  "id": "B01",
+  "split": "tune",
+  "expected": "refuse",
+  "outcome": "refuse",
+  "correct": true,
+  "tracked": 16,
+  "bridged": 0,
+  "trackingCue": "tap-sim",
+  "recall": "13/13",
+  "medianErrPx": 0.39,
+  "maxErrPx": 0.6,
+  "wrongAssoc": 0,
+  "unverifiedPts": 3,
+  "releaseErrFrames": null,
+  "falseArrival": false,
+  "speed": null,
+  "reason": "No bowling action was found, so the release could not be located. Step to the frame where the ball has just left the hand and tap the ball.",
+  "ms": 26,
+  "points": [],
+  "checks": [
+   {
+    "id": "timing",
+    "label": "Frame timing",
+    "ok": true,
+    "detail": "7 repeated frames removed: the file was converted from about 24 fps. Unique frames re-timed evenly (moves frames by up to 13 ms)."
+   },
+   {
+    "id": "release",
+    "label": "Release",
+    "ok": false,
+    "detail": "No bowling action found."
+   }
+  ],
+  "release": null,
+  "contact": null,
+  "cadence": [
+   "7 repeated frames removed: the file was converted from about 24 fps. Unique frames re-timed evenly (moves frames by up to 13 ms)."
+  ]
+ },
+ "A03": {
+  "id": "A03",
+  "split": "dev",
+  "expected": "refuse",
+  "outcome": "refuse",
+  "correct": true,
+  "tracked": 9,
+  "bridged": 0,
+  "trackingCue": "pose-sim",
+  "recall": "8/8",
+  "medianErrPx": 0.42,
+  "maxErrPx": 0.5,
+  "wrongAssoc": 0,
+  "unverifiedPts": 1,
+  "releaseErrFrames": -1,
+  "falseArrival": false,
+  "speed": null,
+  "reason": "The ball was lost before it reached the batter (often hidden by the bowler's follow-through), so bat contact cannot be linked to it. Move the camera slightly higher or to one side.",
+  "ms": 239,
+  "points": [
+   [
+    12.533333,
+    268.4,
+    518.8,
+    1
+   ],
+   [
+    12.566667,
+    275,
+    522.9,
+    1
+   ],
+   [
+    12.6,
+    280.1,
+    528.6,
+    1
+   ],
+   [
+    12.633333,
+    284.8,
+    535.2,
+    1
+   ],
+   [
+    12.7,
+    288.3,
+    542.7,
+    1
+   ],
+   [
+    12.733333,
+    291.3,
+    550.7,
+    1
+   ],
+   [
+    12.766667,
+    293.8,
+    559.6,
+    1
+   ],
+   [
+    12.8,
+    296,
+    568.5,
+    1
+   ],
+   [
+    12.866667,
+    298,
+    578.2,
+    1
+   ]
+  ],
+  "checks": [
+   {
+    "id": "timing",
+    "label": "Frame timing",
+    "ok": true,
+    "detail": "6 repeated frames removed: the file was converted from about 25 fps. Unique frames re-timed evenly (moves frames by up to 28 ms)."
+   },
+   {
+    "id": "track",
+    "label": "Ball path",
+    "ok": true,
+    "detail": "9 frames with the ball seen."
+   },
+   {
+    "id": "release",
+    "label": "Release",
+    "ok": true,
+    "detail": "Ball first seen free at 12.533 s. Hand contact was not confirmed, so release is allowed anywhere from 100 ms before to one frame after."
+   },
+   {
+    "id": "arrival",
+    "label": "Reaches the batter",
+    "ok": false,
+    "detail": "Last seen at 12.867 s, short of the batter's end."
+   }
+  ],
+  "release": {
+   "bracket": [
+    12.42042486697861,
+    12.560219872994653
+   ],
+   "firstFreePts": 12.533333,
+   "prevPts": 12.466667,
+   "confirmed": false
+  },
+  "contact": null,
+  "cadence": [
+   "6 repeated frames removed: the file was converted from about 25 fps. Unique frames re-timed evenly (moves frames by up to 28 ms)."
+  ]
+ },
+ "A05": {
+  "id": "A05",
+  "split": "dev",
+  "expected": "refuse",
+  "outcome": "refuse",
+  "correct": true,
+  "tracked": 10,
+  "bridged": 0,
+  "trackingCue": "pose-sim",
+  "recall": "10/13",
+  "medianErrPx": 0.44,
+  "maxErrPx": 0.6,
+  "wrongAssoc": 0,
+  "unverifiedPts": 0,
+  "releaseErrFrames": 2,
+  "falseArrival": false,
+  "speed": null,
+  "reason": "The ball was lost before it reached the batter (often hidden by the bowler's follow-through), so bat contact cannot be linked to it. Move the camera slightly higher or to one side.",
+  "ms": 756,
+  "points": [
+   [
+    19.933333,
+    314.8,
+    515.2,
+    1
+   ],
+   [
+    19.966667,
+    319.3,
+    519.6,
+    1
+   ],
+   [
+    20.033333,
+    323.4,
+    524.6,
+    1
+   ],
+   [
+    20.066667,
+    326.7,
+    531,
+    1
+   ],
+   [
+    20.1,
+    329.6,
+    538.1,
+    1
+   ],
+   [
+    20.133333,
+    332.3,
+    545.5,
+    1
+   ],
+   [
+    20.2,
+    334.2,
+    553.3,
+    1
+   ],
+   [
+    20.233333,
+    336.6,
+    562,
+    1
+   ],
+   [
+    20.266667,
+    338.3,
+    570,
+    1
+   ],
+   [
+    20.3,
+    339.6,
+    579.1,
+    1
+   ]
+  ],
+  "checks": [
+   {
+    "id": "timing",
+    "label": "Frame timing",
+    "ok": true,
+    "detail": "7 repeated frames removed: the file was converted from about 24 fps. Unique frames re-timed evenly (moves frames by up to 14 ms)."
+   },
+   {
+    "id": "track",
+    "label": "Ball path",
+    "ok": true,
+    "detail": "10 frames with the ball seen."
+   },
+   {
+    "id": "release",
+    "label": "Release",
+    "ok": true,
+    "detail": "Ball first seen free at 19.933 s. Hand contact was not confirmed, so release is allowed anywhere from 100 ms before to one frame after."
+   },
+   {
+    "id": "arrival",
+    "label": "Reaches the batter",
+    "ok": false,
+    "detail": "Last seen at 20.300 s, short of the batter's end."
+   }
+  ],
+  "release": {
+   "bracket": [
+    19.837683286840175,
+    19.979227762280058
+   ],
+   "firstFreePts": 19.933333,
+   "prevPts": 19.9,
+   "confirmed": false
+  },
+  "contact": null,
+  "cadence": [
+   "7 repeated frames removed: the file was converted from about 24 fps. Unique frames re-timed evenly (moves frames by up to 14 ms)."
+  ]
+ },
+ "A07": {
+  "id": "A07",
+  "split": "dev",
+  "expected": "refuse",
+  "outcome": "refuse",
+  "correct": true,
+  "tracked": 6,
+  "bridged": 0,
+  "trackingCue": "pose-sim",
+  "recall": "6/8",
+  "medianErrPx": 0.25,
+  "maxErrPx": 0.6,
+  "wrongAssoc": 0,
+  "unverifiedPts": 0,
+  "releaseErrFrames": 0,
+  "falseArrival": false,
+  "speed": null,
+  "reason": "The ball was lost before it reached the batter (often hidden by the bowler's follow-through), so bat contact cannot be linked to it. Move the camera slightly higher or to one side.",
+  "ms": 497,
+  "points": [
+   [
+    26.966667,
+    305.4,
+    551.6,
+    1
+   ],
+   [
+    27.033333,
+    312.1,
+    561,
+    1
+   ],
+   [
+    27.066667,
+    317.4,
+    570.4,
+    1
+   ],
+   [
+    27.1,
+    321.1,
+    579.8,
+    1
+   ],
+   [
+    27.133333,
+    325,
+    590.2,
+    1
+   ],
+   [
+    27.2,
+    328,
+    600.1,
+    1
+   ]
+  ],
+  "checks": [
+   {
+    "id": "timing",
+    "label": "Frame timing",
+    "ok": true,
+    "detail": "6 repeated frames removed: the file was converted from about 25 fps. Unique frames re-timed evenly (moves frames by up to 32 ms)."
+   },
+   {
+    "id": "track",
+    "label": "Ball path",
+    "ok": true,
+    "detail": "6 frames with the ball seen."
+   },
+   {
+    "id": "release",
+    "label": "Release",
+    "ok": true,
+    "detail": "Ball first seen free at 26.967 s. Hand contact was not confirmed, so release is allowed anywhere from 100 ms before to one frame after."
+   },
+   {
+    "id": "arrival",
+    "label": "Reaches the batter",
+    "ok": false,
+    "detail": "Last seen at 27.200 s, short of the batter's end."
+   }
+  ],
+  "release": {
+   "bracket": [
+    26.874487523841353,
+    27.015151515151516
+   ],
+   "firstFreePts": 26.966667,
+   "prevPts": 26.933333,
+   "confirmed": false
+  },
+  "contact": null,
+  "cadence": [
+   "6 repeated frames removed: the file was converted from about 25 fps. Unique frames re-timed evenly (moves frames by up to 32 ms)."
+  ]
+ },
+ "A09": {
+  "id": "A09",
+  "split": "dev",
+  "expected": "refuse",
+  "outcome": "refuse",
+  "correct": true,
+  "tracked": 8,
+  "bridged": 0,
+  "trackingCue": "pose-sim",
+  "recall": "8/8",
+  "medianErrPx": 0.46,
+  "maxErrPx": 0.6,
+  "wrongAssoc": 0,
+  "unverifiedPts": 0,
+  "releaseErrFrames": 2,
+  "falseArrival": false,
+  "speed": null,
+  "reason": "The ball was lost before it reached the batter (often hidden by the bowler's follow-through), so bat contact cannot be linked to it. Move the camera slightly higher or to one side.",
+  "ms": 295,
+  "points": [
+   [
+    33.933333,
+    299,
+    519,
+    1
+   ],
+   [
+    33.966667,
+    303.4,
+    525.1,
+    1
+   ],
+   [
+    34,
+    307.3,
+    531.7,
+    1
+   ],
+   [
+    34.033333,
+    310.3,
+    538.5,
+    1
+   ],
+   [
+    34.066667,
+    312.6,
+    546.2,
+    1
+   ],
+   [
+    34.133333,
+    314.5,
+    554,
+    1
+   ],
+   [
+    34.166667,
+    316.8,
+    562.5,
+    1
+   ],
+   [
+    34.2,
+    318.7,
+    571.4,
+    1
+   ]
+  ],
+  "checks": [
+   {
+    "id": "timing",
+    "label": "Frame timing",
+    "ok": true,
+    "detail": "6 repeated frames removed: the file was converted from about 25 fps. Unique frames re-timed evenly (moves frames by up to 25 ms)."
+   },
+   {
+    "id": "track",
+    "label": "Ball path",
+    "ok": true,
+    "detail": "8 frames with the ball seen."
+   },
+   {
+    "id": "release",
+    "label": "Release",
+    "ok": true,
+    "detail": "Ball first seen free at 33.933 s. Hand contact was not confirmed, so release is allowed anywhere from 100 ms before to one frame after."
+   },
+   {
+    "id": "arrival",
+    "label": "Reaches the batter",
+    "ok": false,
+    "detail": "Last seen at 34.200 s, short of the batter's end."
+   }
+  ],
+  "release": {
+   "bracket": [
+    33.83356728765597,
+    33.973195181372546
+   ],
+   "firstFreePts": 33.933333,
+   "prevPts": 33.9,
+   "confirmed": false
+  },
+  "contact": null,
+  "cadence": [
+   "6 repeated frames removed: the file was converted from about 25 fps. Unique frames re-timed evenly (moves frames by up to 25 ms)."
+  ]
+ },
+ "A10": {
+  "id": "A10",
+  "split": "dev",
+  "expected": "refuse",
+  "outcome": "refuse",
+  "correct": true,
+  "tracked": 8,
+  "bridged": 0,
+  "trackingCue": "pose-sim",
+  "recall": "8/8",
+  "medianErrPx": 0.35,
+  "maxErrPx": 0.4,
+  "wrongAssoc": 0,
+  "unverifiedPts": 0,
+  "releaseErrFrames": 0,
+  "falseArrival": false,
+  "speed": null,
+  "reason": "The ball was lost before it reached the batter (often hidden by the bowler's follow-through), so bat contact cannot be linked to it. Move the camera slightly higher or to one side.",
+  "ms": 349,
+  "points": [
+   [
+    36.933333,
+    299.3,
+    527.9,
+    1
+   ],
+   [
+    36.966667,
+    305.2,
+    532.9,
+    1
+   ],
+   [
+    37,
+    310.4,
+    538.8,
+    1
+   ],
+   [
+    37.066667,
+    314.8,
+    545.8,
+    1
+   ],
+   [
+    37.1,
+    318.3,
+    552.7,
+    1
+   ],
+   [
+    37.133333,
+    322,
+    560.2,
+    1
+   ],
+   [
+    37.166667,
+    324.3,
+    568.1,
+    1
+   ],
+   [
+    37.233333,
+    327.1,
+    576.8,
+    1
+   ]
+  ],
+  "checks": [
+   {
+    "id": "timing",
+    "label": "Frame timing",
+    "ok": true,
+    "detail": "7 repeated frames removed: the file was converted from about 25 fps. Unique frames re-timed evenly (moves frames by up to 30 ms)."
+   },
+   {
+    "id": "track",
+    "label": "Ball path",
+    "ok": true,
+    "detail": "8 frames with the ball seen."
+   },
+   {
+    "id": "release",
+    "label": "Release",
+    "ok": true,
+    "detail": "Ball first seen free at 36.933 s. Hand contact was not confirmed, so release is allowed anywhere from 100 ms before to one frame after."
+   },
+   {
+    "id": "arrival",
+    "label": "Reaches the batter",
+    "ok": false,
+    "detail": "Last seen at 37.233 s, short of the batter's end."
+   }
+  ],
+  "release": {
+   "bracket": [
+    36.84173389314515,
+    36.982190879032245
+   ],
+   "firstFreePts": 36.933333,
+   "prevPts": 36.9,
+   "confirmed": false
+  },
+  "contact": null,
+  "cadence": [
+   "7 repeated frames removed: the file was converted from about 25 fps. Unique frames re-timed evenly (moves frames by up to 30 ms)."
+  ]
+ },
+ "A11": {
+  "id": "A11",
+  "split": "holdout",
+  "expected": "refuse",
+  "outcome": "refuse",
+  "correct": true,
+  "tracked": 9,
+  "bridged": 0,
+  "trackingCue": "pose-sim",
+  "recall": "9/9",
+  "medianErrPx": 0.34,
+  "maxErrPx": 0.6,
+  "wrongAssoc": 0,
+  "unverifiedPts": 0,
+  "releaseErrFrames": 0,
+  "falseArrival": false,
+  "speed": null,
+  "reason": "The ball was lost before it reached the batter (often hidden by the bowler's follow-through), so bat contact cannot be linked to it. Move the camera slightly higher or to one side.",
+  "ms": 750,
+  "points": [
+   [
+    40.333333,
+    292.7,
+    519.9,
+    1
+   ],
+   [
+    40.366667,
+    297.7,
+    523.1,
+    1
+   ],
+   [
+    40.433333,
+    301.8,
+    527.7,
+    1
+   ],
+   [
+    40.466667,
+    305.5,
+    533.7,
+    1
+   ],
+   [
+    40.5,
+    308.7,
+    540.1,
+    1
+   ],
+   [
+    40.533333,
+    311.3,
+    547.3,
+    1
+   ],
+   [
+    40.6,
+    313.7,
+    554.8,
+    1
+   ],
+   [
+    40.633333,
+    316.2,
+    562.6,
+    1
+   ],
+   [
+    40.666667,
+    318.1,
+    571,
+    1
+   ]
+  ],
+  "checks": [
+   {
+    "id": "timing",
+    "label": "Frame timing",
+    "ok": true,
+    "detail": "8 repeated frames removed: the file was converted from about 24 fps. Unique frames re-timed evenly (moves frames by up to 13 ms)."
+   },
+   {
+    "id": "track",
+    "label": "Ball path",
+    "ok": true,
+    "detail": "9 frames with the ball seen."
+   },
+   {
+    "id": "release",
+    "label": "Release",
+    "ok": true,
+    "detail": "Ball first seen free at 40.333 s. Hand contact was not confirmed, so release is allowed anywhere from 100 ms before to one frame after."
+   },
+   {
+    "id": "arrival",
+    "label": "Reaches the batter",
+    "ok": false,
+    "detail": "Last seen at 40.667 s, short of the batter's end."
+   }
+  ],
+  "release": {
+   "bracket": [
+    40.23741935806451,
+    40.379139784677406
+   ],
+   "firstFreePts": 40.333333,
+   "prevPts": 40.3,
+   "confirmed": false
+  },
+  "contact": null,
+  "cadence": [
+   "8 repeated frames removed: the file was converted from about 24 fps. Unique frames re-timed evenly (moves frames by up to 13 ms)."
+  ]
+ },
+ "A12": {
+  "id": "A12",
+  "split": "holdout",
+  "expected": "refuse",
+  "outcome": "refuse",
+  "correct": true,
+  "tracked": 9,
+  "bridged": 0,
+  "trackingCue": "pose-sim",
+  "recall": "9/9",
+  "medianErrPx": 0.34,
+  "maxErrPx": 0.4,
+  "wrongAssoc": 0,
+  "unverifiedPts": 0,
+  "releaseErrFrames": 1,
+  "falseArrival": false,
+  "speed": null,
+  "reason": "The ball was lost before it reached the batter (often hidden by the bowler's follow-through), so bat contact cannot be linked to it. Move the camera slightly higher or to one side.",
+  "ms": 1321,
+  "points": [
+   [
+    43.7,
+    285.2,
+    523.3,
+    1
+   ],
+   [
+    43.733333,
+    288.9,
+    527,
+    1
+   ],
+   [
+    43.8,
+    292.2,
+    533.2,
+    1
+   ],
+   [
+    43.833333,
+    294.9,
+    538.6,
+    1
+   ],
+   [
+    43.866667,
+    297.9,
+    546.4,
+    1
+   ],
+   [
+    43.9,
+    300.1,
+    553.8,
+    1
+   ],
+   [
+    43.966667,
+    302.1,
+    561.9,
+    1
+   ],
+   [
+    44,
+    303.8,
+    570.3,
+    1
+   ],
+   [
+    44.033333,
+    305.3,
+    579.1,
+    1
+   ]
+  ],
+  "checks": [
+   {
+    "id": "timing",
+    "label": "Frame timing",
+    "ok": true,
+    "detail": "7 repeated frames removed: the file was converted from about 24 fps. Unique frames re-timed evenly (moves frames by up to 17 ms)."
+   },
+   {
+    "id": "track",
+    "label": "Ball path",
+    "ok": true,
+    "detail": "9 frames with the ball seen."
+   },
+   {
+    "id": "release",
+    "label": "Release",
+    "ok": true,
+    "detail": "Ball first seen free at 43.700 s. Hand contact was not confirmed, so release is allowed anywhere from 100 ms before to one frame after."
+   },
+   {
+    "id": "arrival",
+    "label": "Reaches the batter",
+    "ok": false,
+    "detail": "Last seen at 44.033 s, short of the batter's end."
+   }
+  ],
+  "release": {
+   "bracket": [
+    43.60595065927419,
+    43.747452366935484
+   ],
+   "firstFreePts": 43.7,
+   "prevPts": 43.666667,
+   "confirmed": false
+  },
+  "contact": null,
+  "cadence": [
+   "7 repeated frames removed: the file was converted from about 24 fps. Unique frames re-timed evenly (moves frames by up to 17 ms)."
+  ]
+ }
+}

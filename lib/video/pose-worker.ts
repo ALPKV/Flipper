@@ -3,7 +3,7 @@ import { ALL_FORMATS, BlobSource, CanvasSink, Input } from "mediabunny";
 import { bowlingActions, followThroughActions, type BodyFrame, type PoseAction } from "../tracking/pose-actions";
 
 const scope=self as unknown as { onmessage: ((event:MessageEvent)=>void)|null; postMessage:(v:unknown)=>void; location:Location };
-scope.onmessage=async ({data}:{data:{file:File;factor:number;hz:number}})=> {
+scope.onmessage=async ({data}:{data:{file:File;factor:number;hz:number;at?:number[]}})=> {
   let detector:PoseLandmarker|undefined;
   const input=new Input({formats:ALL_FORMATS,source:new BlobSource(data.file)});
   try {
@@ -17,6 +17,23 @@ scope.onmessage=async ({data}:{data:{file:File;factor:number;hz:number}})=> {
     });
     const track=await input.getPrimaryVideoTrack();
     if (!track || !await track.canDecode()) throw new Error("Pose analysis needs a browser-supported video codec. Try an H.264 MP4.");
+    if(data.at){
+      // Wrists at specific frames (Speed Check release confirmation). Coordinates are 0-1 of the display frame.
+      const scale=Math.min(1,720/Math.max(track.displayWidth,track.displayHeight));
+      const sink=new CanvasSink(track,{width:Math.round(track.displayWidth*scale),height:Math.round(track.displayHeight*scale),fit:"fill",poolSize:1});
+      const frames:{t:number;people:{wrists:{x:number;y:number;visibility:number}[];torso:number}[]}[]=[];
+      let last=-Infinity;
+      for await(const frame of sink.canvasesAtTimestamps([...data.at].sort((a,b)=>a-b))){
+        if(!frame)continue;
+        const ts=Math.max(frame.timestamp*1000,last+1);last=ts;
+        const result=detector.detectForVideo(frame.canvas,ts);
+        frames.push({t:frame.timestamp,people:result.landmarks.map(l=>({
+          wrists:[15,16].map(i=>({x:l[i].x,y:l[i].y,visibility:l[i].visibility??0})),
+          torso:Math.hypot((l[11].x+l[12].x)/2-(l[23].x+l[24].x)/2,(l[11].y+l[12].y)/2-(l[23].y+l[24].y)/2)}))});
+      }
+      scope.postMessage({result:{frames}});
+      return;
+    }
     const duration=await input.computeDuration();
     if (!Number.isFinite(duration)||duration<=0||duration>7200) throw new Error("Choose a recording shorter than two hours.");
     const scale=Math.min(1,720/Math.max(track.displayWidth,track.displayHeight));
